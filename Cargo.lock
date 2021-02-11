@@ -714,6 +714,7 @@ dependencies = [
  "anyhow",
  "binary_search_tree",
  "bindings",
+ "bitflags",
  "crossbeam-channel",
  "dirs",
  "env_logger",

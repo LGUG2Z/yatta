@@ -16,7 +16,7 @@ use crate::{
     workspace::Workspace,
 };
 use anyhow::Result;
-use log::{error, info};
+use log::{debug, error, info};
 use yatta_core::{OperationDirection, SocketMessage};
 
 mod message_loop;
@@ -128,7 +128,7 @@ fn handle_windows_event_message(ev: WindowsEvent, workspace: Arc<Mutex<Workspace
                     workspace.calculate_layout();
                     workspace.apply_layout(None);
                 } else {
-                    info!(
+                    debug!(
                         "did not retile on show event as window is already shown: {:?}",
                         &ev
                     );

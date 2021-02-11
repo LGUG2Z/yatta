@@ -97,12 +97,27 @@ extern "system" fn handler(
     let window = Window(hwnd);
 
     let event_code = unsafe { ::std::mem::transmute(event) };
-    if window.should_listen() {
+    if window.should_manage() {
         let event_type = match WindowsEventType::from_event_code(event_code) {
             Some(event) => event,
             None => {
                 // Some apps like Firefox don't send ObjectCreate or ObjectShow on launch
-                if event_code == WinEventCode::ObjectNameChange && window.is_visible() {
+                // This spams the message queue, but I don't know what else to do. On launch
+                // it only sends the following WinEvents :/
+                //
+                // [yatta\src\windows_event.rs:110] event = 32780
+                // [yatta\src\windows_event.rs:111] event_code = ObjectNameChange
+                // [yatta\src\windows_event.rs:110] event = 32779
+                // [yatta\src\windows_event.rs:111] event_code = ObjectLocationChange
+                // [yatta\src\windows_event.rs:110] event = 32779
+                // [yatta\src\windows_event.rs:111] event_code = ObjectLocationChange
+                // [yatta\src\windows_event.rs:110] event = 32780
+                // [yatta\src\windows_event.rs:111] event_code = ObjectNameChange
+                if event_code == WinEventCode::ObjectNameChange
+                    && window.is_visible()
+                    && window.get_title().is_some()
+                    && window.get_title().unwrap().contains("Firefox")
+                {
                     WindowsEventType::Show
                 } else {
                     return;
@@ -129,6 +144,8 @@ extern "system" fn handler(
 
         // Need to expand this blacklist of windows that aren't visible but end up
         // forcing a redraw of the workspace
+
+        // Not sure if this is needed after fixing the should_manage and is_cloaked fns
         let blacklist = vec![
             Some(String::from("Task Host Window")),
             Some(String::from("nsAppShell:EventWindow")), // Firefox
