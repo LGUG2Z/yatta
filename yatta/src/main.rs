@@ -17,7 +17,7 @@ use crate::{
 };
 use anyhow::Result;
 use log::{debug, error, info};
-use yatta_core::{OperationDirection, SocketMessage};
+use yatta_core::{OperationDirection, Sizing, SocketMessage};
 
 mod message_loop;
 mod rect;
@@ -223,7 +223,7 @@ fn handle_socket_message(
                         SocketMessage::TogglePause => {
                             unimplemented!();
                         }
-                        SocketMessage::ReTile => {
+                        SocketMessage::Retile => {
                             workspace.get_visible_windows();
                             workspace.get_foreground_window();
                             workspace.calculate_layout();
@@ -250,6 +250,26 @@ fn handle_socket_message(
                                 workspace.swap_window_next(DirectionOperation::Move)
                             }
                         },
+                        SocketMessage::SetGapSize(size) => {
+                            workspace.set_gaps(size);
+                            workspace.calculate_layout();
+                            workspace.apply_layout(None);
+                        }
+                        SocketMessage::AdjustGaps(sizing) => {
+                            let gaps = workspace.gaps;
+
+                            match sizing {
+                                Sizing::Increase => {
+                                    workspace.set_gaps(gaps + 1);
+                                }
+                                Sizing::Decrease => {
+                                    workspace.set_gaps(gaps - 1);
+                                }
+                            }
+
+                            workspace.calculate_layout();
+                            workspace.apply_layout(None);
+                        }
                     }
                 }
             }

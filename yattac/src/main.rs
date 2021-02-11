@@ -3,7 +3,7 @@ use std::io::Write;
 use clap::Clap;
 use uds_windows::UnixStream;
 
-use yatta_core::{OperationDirection, SocketMessage};
+use yatta_core::{OperationDirection, Sizing, SocketMessage};
 
 #[derive(Clap)]
 #[clap(version = "1.0", author = "Jade I. <jadeiqbal@fastmail.com>")]
@@ -14,16 +14,18 @@ struct Opts {
 
 #[derive(Clap)]
 enum SubCommand {
-    Focus(Direction),
-    Move(Direction),
+    Focus(OperationDirection),
+    Move(OperationDirection),
     Promote,
     TogglePause,
     Retile,
+    SetGapSize(Gaps),
+    AdjustGaps(Sizing),
 }
 
 #[derive(Clap)]
-struct Direction {
-    pub direction: OperationDirection,
+struct Gaps {
+    pub size: i32,
 }
 
 fn main() {
@@ -40,9 +42,7 @@ fn main() {
                 Ok(stream) => stream,
             };
 
-            let bytes = SocketMessage::FocusWindow(direction.direction)
-                .as_bytes()
-                .unwrap();
+            let bytes = SocketMessage::FocusWindow(direction).as_bytes().unwrap();
 
             match stream.write_all(&*bytes) {
                 Err(_) => panic!("couldn't send message"),
@@ -81,7 +81,7 @@ fn main() {
                 Ok(stream) => stream,
             };
 
-            let bytes = SocketMessage::ReTile.as_bytes().unwrap();
+            let bytes = SocketMessage::Retile.as_bytes().unwrap();
 
             match stream.write_all(&*bytes) {
                 Err(_) => panic!("couldn't send message"),
@@ -94,9 +94,33 @@ fn main() {
                 Ok(stream) => stream,
             };
 
-            let bytes = SocketMessage::MoveWindow(direction.direction)
-                .as_bytes()
-                .unwrap();
+            let bytes = SocketMessage::MoveWindow(direction).as_bytes().unwrap();
+
+            match stream.write_all(&*bytes) {
+                Err(_) => panic!("couldn't send message"),
+                Ok(_) => {}
+            }
+        }
+        SubCommand::SetGapSize(gaps) => {
+            let mut stream = match UnixStream::connect(&socket) {
+                Err(_) => panic!("server is not running"),
+                Ok(stream) => stream,
+            };
+
+            let bytes = SocketMessage::SetGapSize(gaps.size).as_bytes().unwrap();
+
+            match stream.write_all(&*bytes) {
+                Err(_) => panic!("couldn't send message"),
+                Ok(_) => {}
+            }
+        }
+        SubCommand::AdjustGaps(sizing) => {
+            let mut stream = match UnixStream::connect(&socket) {
+                Err(_) => panic!("server is not running"),
+                Ok(stream) => stream,
+            };
+
+            let bytes = SocketMessage::AdjustGaps(sizing).as_bytes().unwrap();
 
             match stream.write_all(&*bytes) {
                 Err(_) => panic!("couldn't send message"),

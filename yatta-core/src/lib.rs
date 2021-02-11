@@ -1,4 +1,5 @@
 use anyhow::Result;
+use clap::Clap;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
@@ -8,11 +9,14 @@ pub enum SocketMessage {
     MoveWindow(OperationDirection),
     Promote,
     TogglePause,
-    ReTile,
+    Retile,
+    SetGapSize(i32),
+    AdjustGaps(Sizing),
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Display, EnumString)]
 #[strum(serialize_all = "snake_case")]
+#[derive(Clap)]
 pub enum OperationDirection {
     Left,
     Right,
@@ -20,6 +24,14 @@ pub enum OperationDirection {
     Down,
     Previous,
     Next,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Display, EnumString)]
+#[strum(serialize_all = "snake_case")]
+#[derive(Clap)]
+pub enum Sizing {
+    Increase,
+    Decrease,
 }
 
 impl SocketMessage {

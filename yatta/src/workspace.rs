@@ -19,11 +19,16 @@ pub struct Workspace {
     pub windows:           Vec<Window>,
     pub layout:            Vec<Rect>,
     pub foreground_window: Window,
+    pub gaps:              i32,
 }
 
 pub const PADDING: i32 = 20;
 
 impl Workspace {
+    pub fn set_gaps(&mut self, gaps: i32) {
+        self.gaps = gaps;
+    }
+
     pub fn get_dimensions(&mut self) {
         let active_monitor = unsafe {
             let mut cursor_pos: POINT = mem::zeroed();
@@ -159,7 +164,7 @@ impl Workspace {
     // }
 
     pub fn calculate_layout(&mut self) {
-        self.layout = bsp(0, self.windows.len(), self.dimensions, 1);
+        self.layout = bsp(0, self.windows.len(), self.dimensions, 1, self.gaps);
     }
 
     pub fn apply_layout(&self, new_focus: Option<usize>) {
@@ -189,6 +194,7 @@ impl Default for Workspace {
             windows:           vec![],
             layout:            vec![],
             foreground_window: Window::default(),
+            gaps:              5,
         };
 
         workspace.get_dimensions();
@@ -211,22 +217,22 @@ extern "system" fn enum_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
     true.into()
 }
 
-fn bsp(i: usize, window_count: usize, area: Rect, vertical: usize) -> Vec<Rect> {
+fn bsp(i: usize, window_count: usize, area: Rect, vertical: usize, gaps: i32) -> Vec<Rect> {
     if window_count == 0 {
         vec![]
     } else if window_count == 1 {
         vec![Rect {
-            x:      area.x,
-            y:      area.y,
-            width:  area.width,
-            height: area.height,
+            x:      area.x + gaps,
+            y:      area.y + gaps,
+            width:  area.width - gaps * 2,
+            height: area.height - gaps * 2,
         }]
     } else if i % 2 == vertical {
         let mut res = vec![Rect {
-            x:      area.x,
-            y:      area.y,
-            width:  area.width,
-            height: area.height / 2,
+            x:      area.x + gaps,
+            y:      area.y + gaps,
+            width:  area.width - gaps * 2,
+            height: area.height / 2 - gaps * 2,
         }];
         res.append(&mut bsp(
             i + 1,
@@ -238,14 +244,15 @@ fn bsp(i: usize, window_count: usize, area: Rect, vertical: usize) -> Vec<Rect> 
                 height: area.height / 2,
             },
             vertical,
+            gaps,
         ));
         res
     } else {
         let mut res = vec![Rect {
-            x:      area.x,
-            y:      area.y,
-            width:  area.width / 2,
-            height: area.height,
+            x:      area.x + gaps,
+            y:      area.y + gaps,
+            width:  area.width / 2 - gaps * 2,
+            height: area.height - gaps * 2,
         }];
         res.append(&mut bsp(
             i + 1,
@@ -257,6 +264,7 @@ fn bsp(i: usize, window_count: usize, area: Rect, vertical: usize) -> Vec<Rect> 
                 height: area.height,
             },
             vertical,
+            gaps,
         ));
         res
     }
