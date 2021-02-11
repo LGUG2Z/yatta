@@ -15,7 +15,7 @@ struct Opts {
 #[derive(Clap)]
 enum SubCommand {
     Focus(Direction),
-    Swap(Direction),
+    Move(Direction),
     Promote,
     TogglePause,
     Retile,
@@ -41,21 +41,6 @@ fn main() {
             };
 
             let bytes = SocketMessage::FocusWindow(direction.direction)
-                .as_bytes()
-                .unwrap();
-
-            match stream.write_all(&*bytes) {
-                Err(_) => panic!("couldn't send message"),
-                Ok(_) => {}
-            }
-        }
-        SubCommand::Swap(direction) => {
-            let mut stream = match UnixStream::connect(&socket) {
-                Err(_) => panic!("server is not running"),
-                Ok(stream) => stream,
-            };
-
-            let bytes = SocketMessage::SwapWindow(direction.direction)
                 .as_bytes()
                 .unwrap();
 
@@ -97,6 +82,21 @@ fn main() {
             };
 
             let bytes = SocketMessage::ReTile.as_bytes().unwrap();
+
+            match stream.write_all(&*bytes) {
+                Err(_) => panic!("couldn't send message"),
+                Ok(_) => {}
+            }
+        }
+        SubCommand::Move(direction) => {
+            let mut stream = match UnixStream::connect(&socket) {
+                Err(_) => panic!("server is not running"),
+                Ok(stream) => stream,
+            };
+
+            let bytes = SocketMessage::MoveWindow(direction.direction)
+                .as_bytes()
+                .unwrap();
 
             match stream.write_all(&*bytes) {
                 Err(_) => panic!("couldn't send message"),

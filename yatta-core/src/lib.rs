@@ -5,7 +5,7 @@ use strum::{Display, EnumString};
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Display)]
 pub enum SocketMessage {
     FocusWindow(OperationDirection),
-    SwapWindow(OperationDirection),
+    MoveWindow(OperationDirection),
     Promote,
     TogglePause,
     ReTile,
@@ -14,29 +14,12 @@ pub enum SocketMessage {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Display, EnumString)]
 #[strum(serialize_all = "snake_case")]
 pub enum OperationDirection {
+    Left,
+    Right,
+    Up,
+    Down,
     Previous,
     Next,
-}
-
-impl OperationDirection {
-    pub fn destination(self, idx: usize, len: usize) -> usize {
-        match self {
-            OperationDirection::Previous => {
-                if idx == 0 {
-                    len - 1
-                } else {
-                    idx - 1
-                }
-            }
-            OperationDirection::Next => {
-                if idx == len - 1 {
-                    0
-                } else {
-                    idx + 1
-                }
-            }
-        }
-    }
 }
 
 impl SocketMessage {

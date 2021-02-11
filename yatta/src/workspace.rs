@@ -11,7 +11,7 @@ use bindings::windows::{
     BOOL,
 };
 
-use crate::{rect::Rect, window::Window};
+use crate::{rect::Rect, window::Window, DirectionOperation};
 
 #[derive(Debug, Clone)]
 pub struct Workspace {
@@ -75,6 +75,82 @@ impl Workspace {
         }
 
         idx
+    }
+
+    pub fn follow_focus_with_mouse(&mut self, idx: usize) {
+        let window = self.windows.get(idx).unwrap();
+        window.set_cursor_pos(self.layout[idx]);
+    }
+
+    pub fn move_window_up(&mut self, op: DirectionOperation) {
+        let idx = self.get_foreground_window_index();
+        let valid_direction = self.windows.len() > 2 && idx != 0 && idx != 1;
+
+        if valid_direction {
+            let new_idx = if idx % 2 == 0 { idx - 1 } else { idx - 2 };
+            op.handle(self, idx, new_idx);
+        }
+    }
+
+    pub fn move_window_down(&mut self, op: DirectionOperation) {
+        let idx = self.get_foreground_window_index();
+        let len = self.windows.len();
+        let valid_direction = len > 2 && idx != len - 1 && idx % 2 != 0;
+
+        if valid_direction {
+            let new_idx = idx + 1;
+            op.handle(self, idx, new_idx);
+        }
+    }
+
+    pub fn move_window_left(&mut self, op: DirectionOperation) {
+        let idx = self.get_foreground_window_index();
+        let can_move = self.windows.len() > 1 && idx != 0;
+
+        if can_move {
+            let new_idx = if idx % 2 == 0 { idx - 2 } else { idx - 1 };
+            op.handle(self, idx, new_idx);
+        }
+    }
+
+    pub fn move_window_right(&mut self, op: DirectionOperation) {
+        let idx = self.get_foreground_window_index();
+        let can_move = self.windows.len() > 1 && idx % 2 == 0;
+
+        if can_move {
+            let new_idx = idx + 1;
+            op.handle(self, idx, new_idx);
+        }
+    }
+
+    pub fn swap_window_next(&mut self, op: DirectionOperation) {
+        let idx = self.get_foreground_window_index();
+        let can_move = self.windows.len() > 1;
+
+        if can_move {
+            let new_idx = if idx == self.windows.len() - 1 {
+                0
+            } else {
+                idx + 1
+            };
+
+            op.handle(self, idx, new_idx);
+        }
+    }
+
+    pub fn swap_window_previous(&mut self, op: DirectionOperation) {
+        let idx = self.get_foreground_window_index();
+        let can_move = self.windows.len() > 1;
+
+        if can_move {
+            let new_idx = if idx == 0 {
+                self.windows.len() - 1
+            } else {
+                idx - 1
+            };
+
+            op.handle(self, idx, new_idx);
+        }
     }
 
     // pub fn get_foreground_window_title(&mut self) -> Option<String> {

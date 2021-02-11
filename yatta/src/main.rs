@@ -17,7 +17,7 @@ use crate::{
 };
 use anyhow::Result;
 use log::{error, info};
-use yatta_core::SocketMessage;
+use yatta_core::{OperationDirection, SocketMessage};
 
 mod message_loop;
 mod rect;
@@ -155,6 +155,29 @@ fn handle_windows_event_message(ev: WindowsEvent, workspace: Arc<Mutex<Workspace
     }
 }
 
+pub enum DirectionOperation {
+    Focus,
+    Move,
+}
+
+impl DirectionOperation {
+    pub fn handle(self, workspace: &mut Workspace, idx: usize, new_idx: usize) {
+        match self {
+            DirectionOperation::Focus => {
+                workspace.windows.get(new_idx).unwrap().set_foreground();
+                workspace.calculate_layout();
+            }
+            DirectionOperation::Move => {
+                workspace.windows.swap(idx, new_idx);
+                workspace.calculate_layout();
+                workspace.apply_layout(Option::from(new_idx));
+            }
+        }
+
+        workspace.follow_focus_with_mouse(new_idx);
+    }
+}
+
 fn handle_socket_message(
     stream: uds_windows::UnixStream,
     workspace: &Arc<Mutex<Workspace>>,
@@ -168,26 +191,26 @@ fn handle_socket_message(
                 if let Ok(msg) = SocketMessage::from_str(&socket_msg) {
                     info!("handling socket message: {:?}", &msg);
                     match msg {
-                        SocketMessage::FocusWindow(direction) => {
-                            let idx = workspace.get_foreground_window_index();
-                            let new_idx = direction.destination(idx, workspace.windows.len());
-                            workspace.windows.get(new_idx).unwrap().set_foreground();
-                            workspace.calculate_layout();
-                            let window = workspace.windows.get(new_idx).unwrap();
-
-                            // Mouse follows focus
-                            window.set_cursor_pos(workspace.layout[new_idx]);
-                        }
-                        SocketMessage::SwapWindow(direction) => {
-                            let idx = workspace.get_foreground_window_index();
-                            let new_idx = direction.destination(idx, workspace.windows.len());
-                            workspace.windows.swap(idx, new_idx);
-                            workspace.calculate_layout();
-                            workspace.apply_layout(Option::from(new_idx));
-
-                            let window = workspace.windows.get(new_idx).unwrap();
-                            window.set_cursor_pos(workspace.layout[new_idx]);
-                        }
+                        SocketMessage::FocusWindow(direction) => match direction {
+                            OperationDirection::Left => {
+                                workspace.move_window_left(DirectionOperation::Focus)
+                            }
+                            OperationDirection::Right => {
+                                workspace.move_window_right(DirectionOperation::Focus)
+                            }
+                            OperationDirection::Up => {
+                                workspace.move_window_up(DirectionOperation::Focus)
+                            }
+                            OperationDirection::Down => {
+                                workspace.move_window_down(DirectionOperation::Focus)
+                            }
+                            OperationDirection::Previous => {
+                                workspace.swap_window_previous(DirectionOperation::Focus)
+                            }
+                            OperationDirection::Next => {
+                                workspace.swap_window_next(DirectionOperation::Focus)
+                            }
+                        },
                         SocketMessage::Promote => {
                             let idx = workspace.get_foreground_window_index();
                             let window = workspace.windows.remove(idx);
@@ -207,6 +230,26 @@ fn handle_socket_message(
                             let idx = workspace.foreground_window.get_index(&workspace.windows);
                             workspace.apply_layout(idx);
                         }
+                        SocketMessage::MoveWindow(direction) => match direction {
+                            OperationDirection::Left => {
+                                workspace.move_window_left(DirectionOperation::Move)
+                            }
+                            OperationDirection::Right => {
+                                workspace.move_window_right(DirectionOperation::Move)
+                            }
+                            OperationDirection::Up => {
+                                workspace.move_window_up(DirectionOperation::Move)
+                            }
+                            OperationDirection::Down => {
+                                workspace.move_window_down(DirectionOperation::Move)
+                            }
+                            OperationDirection::Previous => {
+                                workspace.swap_window_previous(DirectionOperation::Move)
+                            }
+                            OperationDirection::Next => {
+                                workspace.swap_window_next(DirectionOperation::Move)
+                            }
+                        },
                     }
                 }
             }
