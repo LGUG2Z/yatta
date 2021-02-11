@@ -95,7 +95,10 @@ bitflags! {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Window(pub HWND);
+pub struct Window {
+    pub hwnd:        HWND,
+    pub should_tile: bool,
+}
 
 unsafe impl Send for Window {}
 
@@ -110,25 +113,28 @@ fn nullable_to_result<T: PartialEq<i32>>(v: T) -> Result<T> {
 impl Window {
     pub fn foreground() -> Window {
         let hwnd = unsafe { GetForegroundWindow() };
-        Window(hwnd)
+        Window {
+            hwnd,
+            should_tile: true,
+        }
     }
 
     pub fn rect(self) -> Rect {
         unsafe {
             let mut rect = mem::zeroed();
 
-            GetWindowRect(self.0, &mut rect);
+            GetWindowRect(self.hwnd, &mut rect);
 
             rect.into()
         }
     }
 
     pub fn is_visible(self) -> bool {
-        unsafe { IsWindowVisible(self.0).into() }
+        unsafe { IsWindowVisible(self.hwnd).into() }
     }
 
     pub fn is_minimized(self) -> bool {
-        unsafe { IsIconic(self.0).into() }
+        unsafe { IsIconic(self.hwnd).into() }
     }
 
     pub fn is_active(self) -> bool {
@@ -137,16 +143,20 @@ impl Window {
 
     pub fn get_style(&self) -> Result<GwlStyle> {
         unsafe {
-            nullable_to_result(GetWindowLongW(self.0, GWL_STYLE))
+            nullable_to_result(GetWindowLongW(self.hwnd, GWL_STYLE))
                 .map(|x| GwlStyle::from_bits_unchecked(x as u32 as i32))
         }
     }
 
     pub fn get_ex_style(&self) -> Result<GwlExStyle> {
         unsafe {
-            nullable_to_result(GetWindowLongW(self.0, GWL_EXSTYLE))
+            nullable_to_result(GetWindowLongW(self.hwnd, GWL_EXSTYLE))
                 .map(|x| GwlExStyle::from_bits_unchecked(x as u32 as i32))
         }
+    }
+
+    pub fn toggle_float(&mut self) {
+        self.should_tile = !self.should_tile;
     }
 
     pub fn should_manage(&self) -> bool {
@@ -192,14 +202,14 @@ impl Window {
 
     pub fn is_regular(self) -> bool {
         unsafe {
-            let extended_styles = GetWindowLongW(self.0, GWL_EXSTYLE);
+            let extended_styles = GetWindowLongW(self.hwnd, GWL_EXSTYLE);
             extended_styles == WS_EX_WINDOWEDGE || extended_styles == WS_EX_CLIENTEDGE
         }
     }
 
     pub fn get_title(self) -> Option<String> {
         let mut text: [u16; 512] = [0; 512];
-        let len = unsafe { GetWindowTextW(self.0, text.as_mut_ptr(), text.len() as i32) };
+        let len = unsafe { GetWindowTextW(self.hwnd, text.as_mut_ptr(), text.len() as i32) };
         let text = String::from_utf16_lossy(&text[..len as usize]);
 
         if text.is_empty() {
@@ -211,7 +221,7 @@ impl Window {
 
     pub fn get_index(self, windows: &Vec<Window>) -> Option<usize> {
         for (i, window) in windows.iter().enumerate() {
-            if window.0 == self.0 {
+            if window.hwnd == self.hwnd {
                 return Some(i);
             }
         }
@@ -225,7 +235,7 @@ impl Window {
             let mut cloaked: u32 = 0;
             // TODO: Handle an error code here, ? won't be threadsafe
             let _ = DwmGetWindowAttribute(
-                self.0,
+                self.hwnd,
                 std::mem::transmute::<_, u32>(DWMWINDOWATTRIBUTE::DWMWA_CLOAKED),
                 &mut cloaked as *mut _ as *mut _,
                 std::mem::size_of::<u32>() as u32,
@@ -245,7 +255,7 @@ impl Window {
     pub fn set_pos(&self, rect: Rect, insert_after: Option<i32>, flags: Option<u32>) {
         unsafe {
             SetWindowPos(
-                self.0,
+                self.hwnd,
                 HWND(insert_after.unwrap_or(HWND_BOTTOM) as isize),
                 rect.x,
                 rect.y,
@@ -264,9 +274,9 @@ impl Window {
 
     pub fn set_foreground(self) {
         unsafe {
-            SetForegroundWindow(self.0);
+            SetForegroundWindow(self.hwnd);
             // This isn't really needed when the above command works as expected via AHK
-            SetFocus(self.0);
+            SetFocus(self.hwnd);
         }
     }
 
@@ -275,7 +285,7 @@ impl Window {
             let mut info: WINDOWINFO = mem::zeroed();
             info.cb_size = mem::size_of::<WINDOWINFO>() as u32;
 
-            GetWindowInfo(self.0, &mut info);
+            GetWindowInfo(self.hwnd, &mut info);
 
             info.into()
         }
@@ -299,20 +309,23 @@ impl Window {
 
     pub fn restore(&mut self) {
         unsafe {
-            ShowWindow(self.0, SW_RESTORE);
+            ShowWindow(self.hwnd, SW_RESTORE);
         };
     }
 }
 
 impl Default for Window {
     fn default() -> Self {
-        Window(HWND(0))
+        Window {
+            hwnd:        HWND(0),
+            should_tile: true,
+        }
     }
 }
 
 impl PartialEq for Window {
     fn eq(&self, other: &Window) -> bool {
-        self.0 == other.0
+        self.hwnd == other.hwnd
     }
 }
 

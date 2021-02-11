@@ -7,17 +7,19 @@ use std::{
     thread,
 };
 
+use anyhow::Result;
 use crossbeam_channel::{select, unbounded, Receiver, Sender};
 use lazy_static::lazy_static;
+use log::{debug, error, info};
 use uds_windows::UnixListener;
 
+use yatta_core::{OperationDirection, Sizing, SocketMessage};
+
 use crate::{
+    rect::Rect,
     windows_event::{WindowsEvent, WindowsEventListener, WindowsEventType},
     workspace::Workspace,
 };
-use anyhow::Result;
-use log::{debug, error, info};
-use yatta_core::{OperationDirection, Sizing, SocketMessage};
 
 mod message_loop;
 mod rect;
@@ -117,7 +119,7 @@ fn handle_windows_event_message(ev: WindowsEvent, workspace: Arc<Mutex<Workspace
                 let mut contains = false;
 
                 for window in &workspace.windows {
-                    if window.0 == ev.window.0 {
+                    if window.hwnd == ev.window.hwnd {
                         contains = true;
                     }
                 }
@@ -212,6 +214,7 @@ fn handle_socket_message(
                             }
                         },
                         SocketMessage::Promote => {
+                            workspace.get_foreground_window();
                             let idx = workspace.get_foreground_window_index();
                             let window = workspace.windows.remove(idx);
                             workspace.windows.insert(0, window);
@@ -222,6 +225,32 @@ fn handle_socket_message(
                         }
                         SocketMessage::TogglePause => {
                             unimplemented!();
+                        }
+                        SocketMessage::ToggleFloat => {
+                            let idx = workspace.get_foreground_window_index();
+                            let mut window = workspace.windows.remove(idx);
+                            window.toggle_float();
+                            workspace.windows.insert(idx, window);
+                            workspace.calculate_layout();
+                            workspace.apply_layout(None);
+                            // Centre the window if we have disabled tiling
+                            if !window.should_tile {
+                                let w2 = workspace.dimensions.width / 2;
+                                let h2 = workspace.dimensions.height / 2;
+                                let center = Rect {
+                                    x:      workspace.dimensions.x
+                                        + ((workspace.dimensions.width - w2) / 2),
+                                    y:      workspace.dimensions.y
+                                        + ((workspace.dimensions.height - h2) / 2),
+                                    width:  w2,
+                                    height: h2,
+                                };
+                                window.set_pos(center, None, None);
+                                window.set_cursor_pos(center);
+                            } else {
+                                // Make sure the mouse cursor goes back once we reenable tiling
+                                window.set_cursor_pos(workspace.layout[idx]);
+                            }
                         }
                         SocketMessage::Retile => {
                             workspace.get_visible_windows();

@@ -9,6 +9,7 @@ pub enum SocketMessage {
     MoveWindow(OperationDirection),
     Promote,
     TogglePause,
+    ToggleFloat,
     Retile,
     SetGapSize(i32),
     AdjustGaps(Sizing),

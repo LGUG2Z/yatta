@@ -94,7 +94,10 @@ extern "system" fn handler(
         return;
     }
 
-    let window = Window(hwnd);
+    let window = Window {
+        hwnd,
+        should_tile: true,
+    };
 
     let event_code = unsafe { ::std::mem::transmute(event) };
     if window.should_manage() {

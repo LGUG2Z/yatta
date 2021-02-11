@@ -18,6 +18,7 @@ enum SubCommand {
     Move(OperationDirection),
     Promote,
     TogglePause,
+    ToggleFloat,
     Retile,
     SetGapSize(Gaps),
     AdjustGaps(Sizing),
@@ -121,6 +122,19 @@ fn main() {
             };
 
             let bytes = SocketMessage::AdjustGaps(sizing).as_bytes().unwrap();
+
+            match stream.write_all(&*bytes) {
+                Err(_) => panic!("couldn't send message"),
+                Ok(_) => {}
+            }
+        }
+        SubCommand::ToggleFloat => {
+            let mut stream = match UnixStream::connect(&socket) {
+                Err(_) => panic!("server is not running"),
+                Ok(stream) => stream,
+            };
+
+            let bytes = SocketMessage::ToggleFloat.as_bytes().unwrap();
 
             match stream.write_all(&*bytes) {
                 Err(_) => panic!("couldn't send message"),

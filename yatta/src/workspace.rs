@@ -73,7 +73,7 @@ impl Workspace {
         let mut idx = 0;
 
         for (i, w) in self.windows.iter().enumerate() {
-            if self.foreground_window.0 == w.0 {
+            if self.foreground_window.hwnd == w.hwnd {
                 idx = i;
                 break;
             }
@@ -164,24 +164,30 @@ impl Workspace {
     // }
 
     pub fn calculate_layout(&mut self) {
-        self.layout = bsp(0, self.windows.len(), self.dimensions, 1, self.gaps);
+        let len = self.windows.iter().filter(|x| x.should_tile).count();
+        self.layout = bsp(0, len, self.dimensions, 1, self.gaps);
     }
 
     pub fn apply_layout(&self, new_focus: Option<usize>) {
+        let mut skipped = 0;
         for (i, w) in self.windows.iter().enumerate() {
-            if let Some(new_idx) = new_focus {
-                // Make sure this is focused
-                if i == new_idx {
-                    w.set_pos(
-                        self.layout[new_idx],
-                        Option::from(HWND_TOP),
-                        Option::from(SWP_NOMOVE as u32 | SWP_NOSIZE as u32),
-                    );
+            if w.should_tile {
+                if let Some(new_idx) = new_focus {
+                    // Make sure this is focused
+                    if i == new_idx {
+                        w.set_pos(
+                            self.layout[new_idx],
+                            Option::from(HWND_TOP),
+                            Option::from(SWP_NOMOVE as u32 | SWP_NOSIZE as u32),
+                        );
+                    } else {
+                        w.set_pos(self.layout[i - skipped], None, None)
+                    }
                 } else {
-                    w.set_pos(self.layout[i], None, None)
+                    w.set_pos(self.layout[i - skipped], None, None)
                 }
             } else {
-                w.set_pos(self.layout[i], None, None)
+                skipped += 1
             }
         }
     }
@@ -209,7 +215,10 @@ impl Default for Workspace {
 
 extern "system" fn enum_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
     let windows = unsafe { &mut *(lparam.0 as *mut Vec<Window>) };
-    let w = Window(hwnd);
+    let w = Window {
+        hwnd,
+        should_tile: true,
+    };
     if w.is_visible() && !w.is_minimized() && w.should_manage() {
         windows.push(w)
     }
