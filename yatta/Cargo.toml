@@ -11,13 +11,13 @@ yatta-core = { path = "../yatta-core"}
 
 anyhow = "1.0.38"
 binary_search_tree = "0.2.2"
+bitflags = "1.2.1"
 crossbeam-channel = "0.5.0"
 dirs = "3.0.1"
+env_logger = "0.8.2"
 lazy_static = "1.4.0"
+log = "0.4.14"
 num-derive = "0.3"
 num-traits = "0.2"
 strum = { version = "0.20", features = ["derive"] }
 uds_windows = "1.0.1"
-log = "0.4.14"
-env_logger = "0.8.2"
-bitflags = "1.2.1"

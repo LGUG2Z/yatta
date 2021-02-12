@@ -1,6 +1,6 @@
 use std::{
     sync::{
-        atomic::{AtomicBool, AtomicI32, Ordering},
+        atomic::{AtomicIsize, Ordering},
         Arc,
         Mutex,
     },
@@ -28,15 +28,13 @@ lazy_static! {
 
 #[derive(Debug, Clone)]
 pub struct WindowsEventListener {
-    stopped: Arc<AtomicBool>,
-    hook:    Arc<AtomicI32>,
+    hook: Arc<AtomicIsize>,
 }
 
 impl Default for WindowsEventListener {
     fn default() -> Self {
         Self {
-            stopped: Arc::new(AtomicBool::new(false)),
-            hook:    Arc::new(AtomicI32::new(0)),
+            hook: Arc::new(AtomicIsize::new(0)),
         }
     }
 }
@@ -44,7 +42,6 @@ impl Default for WindowsEventListener {
 impl WindowsEventListener {
     pub fn start(&self) {
         let hook = self.hook.clone();
-        let stopped = self.stopped.clone();
         let message_sender = MESSAGE_CHANNEL.lock().unwrap().0.clone();
 
         thread::spawn(move || unsafe {
@@ -56,17 +53,12 @@ impl WindowsEventListener {
                 0,
                 0,
                 0,
-            ) as i32;
+            );
 
             hook.store(hook_ref, Ordering::SeqCst);
 
             info!("starting message loop");
             message_loop::start(|_| {
-                if stopped.load(Ordering::SeqCst) {
-                    stopped.store(false, Ordering::SeqCst);
-                    return false;
-                }
-
                 if let Ok(event) = WINDOWS_EVENT_CHANNEL.lock().unwrap().1.try_recv() {
                     message_sender
                         .send(Message::WindowsEvent(event))

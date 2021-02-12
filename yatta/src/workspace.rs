@@ -22,6 +22,7 @@ pub struct Workspace {
     pub foreground_window: Window,
     pub gaps:              i32,
     pub orientation:       Orientation,
+    pub paused:            bool,
 }
 
 pub const PADDING: i32 = 20;
@@ -48,10 +49,10 @@ impl Workspace {
             info.rc_work.into()
         };
 
-        rect.height = rect.height - (PADDING * 2);
-        rect.width = rect.width - (PADDING * 2);
-        rect.y = rect.y + PADDING;
-        rect.x = rect.x + PADDING;
+        rect.height -= PADDING * 2;
+        rect.width -= PADDING * 2;
+        rect.y += PADDING;
+        rect.x += PADDING;
 
         self.dimensions = rect;
     }
@@ -266,6 +267,7 @@ impl Default for Workspace {
             foreground_window: Window::default(),
             gaps:              5,
             orientation:       Orientation::Vertical,
+            paused:            false,
         };
 
         workspace.get_dimensions();

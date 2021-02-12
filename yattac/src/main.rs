@@ -41,9 +41,8 @@ pub fn send_message(bytes: &[u8]) {
         Ok(stream) => stream,
     };
 
-    match stream.write_all(&*bytes) {
-        Err(_) => panic!("couldn't send message"),
-        Ok(_) => {}
+    if stream.write_all(&*bytes).is_err() {
+        panic!("couldn't send message")
     }
 }
 

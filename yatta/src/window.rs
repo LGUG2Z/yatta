@@ -71,7 +71,7 @@ bitflags! {
         const CONTROLPARENT = WS_EX_CONTROLPARENT as i32;
         const DLGMODALFRAME = WS_EX_DLGMODALFRAME as i32;
         // This isn't available in windows-rs
-        const LAYERED = 0x00080000 as i32;
+        const LAYERED = 0x00080000_i32;
         const LAYOUTRTL = WS_EX_LAYOUTRTL as i32;
         const LEFT = WS_EX_LEFT as i32;
         const LEFTSCROLLBAR = WS_EX_LEFTSCROLLBAR as i32;
@@ -219,7 +219,7 @@ impl Window {
         }
     }
 
-    pub fn get_index(self, windows: &Vec<Window>) -> Option<usize> {
+    pub fn get_index(self, windows: &[Window]) -> Option<usize> {
         for (i, window) in windows.iter().enumerate() {
             if window.hwnd == self.hwnd {
                 return Some(i);

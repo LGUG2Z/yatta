@@ -106,6 +106,10 @@ fn main() -> Result<()> {
 
 fn handle_windows_event_message(ev: WindowsEvent, workspace: Arc<Mutex<Workspace>>) {
     let mut workspace = workspace.lock().unwrap();
+    if workspace.paused {
+        return;
+    }
+
     info!("handling windows event: {:?}", &ev);
     match ev.event_type {
         WindowsEventType::Show => {
@@ -193,6 +197,10 @@ fn handle_socket_message(
         match line {
             Ok(socket_msg) => {
                 if let Ok(msg) = SocketMessage::from_str(&socket_msg) {
+                    if workspace.paused && !matches!(msg, SocketMessage::TogglePause) {
+                        return;
+                    }
+
                     info!("handling socket message: {:?}", &msg);
                     match msg {
                         SocketMessage::FocusWindow(direction) => match direction {
@@ -226,7 +234,7 @@ fn handle_socket_message(
                             window.set_cursor_pos(workspace.layout[0]);
                         }
                         SocketMessage::TogglePause => {
-                            unimplemented!();
+                            workspace.paused = !workspace.paused;
                         }
                         SocketMessage::ToggleFloat => {
                             let idx = workspace.get_foreground_window_index();
