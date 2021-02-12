@@ -224,7 +224,6 @@ fn handle_socket_message(
                             }
                         },
                         SocketMessage::Promote => {
-                            workspace.get_foreground_window();
                             let idx = workspace.get_foreground_window_index();
                             let window = workspace.windows.remove(idx);
                             workspace.windows.insert(0, window);
