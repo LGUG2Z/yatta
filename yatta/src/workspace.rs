@@ -10,6 +10,7 @@ use bindings::windows::{
     },
     BOOL,
 };
+use yatta_core::Orientation;
 
 use crate::{rect::Rect, window::Window, DirectionOperation};
 
@@ -20,6 +21,7 @@ pub struct Workspace {
     pub layout:            Vec<Rect>,
     pub foreground_window: Window,
     pub gaps:              i32,
+    pub orientation:       Orientation,
 }
 
 pub const PADDING: i32 = 20;
@@ -87,48 +89,104 @@ impl Workspace {
         window.set_cursor_pos(self.layout[idx]);
     }
 
-    pub fn move_window_up(&mut self, op: DirectionOperation) {
+    pub fn window_op_up(&mut self, op: DirectionOperation) {
         let idx = self.get_foreground_window_index();
-        let valid_direction = self.windows.len() > 2 && idx != 0 && idx != 1;
+        let can_move = match self.orientation {
+            Orientation::Vertical => self.windows.len() > 2 && idx != 0 && idx != 1,
+            Orientation::Horizontal => self.windows.len() > 1 && idx != 0,
+        };
 
-        if valid_direction {
-            let new_idx = if idx % 2 == 0 { idx - 1 } else { idx - 2 };
+        if can_move {
+            let new_idx = match self.orientation {
+                Orientation::Vertical => {
+                    if idx % 2 == 0 {
+                        idx - 1
+                    } else {
+                        idx - 2
+                    }
+                }
+                Orientation::Horizontal => {
+                    if idx % 2 == 0 {
+                        idx - 2
+                    } else {
+                        idx - 1
+                    }
+                }
+            };
+
             op.handle(self, idx, new_idx);
         }
     }
 
-    pub fn move_window_down(&mut self, op: DirectionOperation) {
+    pub fn window_op_down(&mut self, op: DirectionOperation) {
         let idx = self.get_foreground_window_index();
         let len = self.windows.len();
-        let valid_direction = len > 2 && idx != len - 1 && idx % 2 != 0;
 
-        if valid_direction {
-            let new_idx = idx + 1;
-            op.handle(self, idx, new_idx);
-        }
-    }
-
-    pub fn move_window_left(&mut self, op: DirectionOperation) {
-        let idx = self.get_foreground_window_index();
-        let can_move = self.windows.len() > 1 && idx != 0;
+        let can_move = match self.orientation {
+            Orientation::Vertical => len > 2 && idx != len - 1 && idx % 2 != 0,
+            Orientation::Horizontal => self.windows.len() > 1 && idx % 2 == 0,
+        };
 
         if can_move {
-            let new_idx = if idx % 2 == 0 { idx - 2 } else { idx - 1 };
+            let new_idx = match self.orientation {
+                Orientation::Vertical => idx + 1,
+                Orientation::Horizontal => idx + 1,
+            };
+
             op.handle(self, idx, new_idx);
         }
     }
 
-    pub fn move_window_right(&mut self, op: DirectionOperation) {
+    pub fn window_op_left(&mut self, op: DirectionOperation) {
         let idx = self.get_foreground_window_index();
-        let can_move = self.windows.len() > 1 && idx % 2 == 0;
+        let can_move = match self.orientation {
+            Orientation::Vertical => self.windows.len() > 1 && idx != 0,
+            Orientation::Horizontal => self.windows.len() > 2 && idx != 0 && idx != 1,
+        };
 
         if can_move {
-            let new_idx = idx + 1;
+            let new_idx = match self.orientation {
+                Orientation::Vertical => {
+                    if idx % 2 == 0 {
+                        idx - 2
+                    } else {
+                        idx - 1
+                    }
+                }
+                Orientation::Horizontal => {
+                    if idx % 2 == 0 {
+                        idx - 1
+                    } else {
+                        idx - 2
+                    }
+                }
+            };
+
             op.handle(self, idx, new_idx);
         }
     }
 
-    pub fn swap_window_next(&mut self, op: DirectionOperation) {
+    pub fn window_op_right(&mut self, op: DirectionOperation) {
+        let idx = self.get_foreground_window_index();
+
+        let can_move = match self.orientation {
+            Orientation::Vertical => self.windows.len() > 1 && idx % 2 == 0,
+            Orientation::Horizontal => {
+                self.windows.len() > 2 && idx % 2 != 0 && idx != self.windows.len() - 1
+            }
+        };
+
+        if can_move {
+            let new_idx = match self.orientation {
+                Orientation::Vertical => idx + 1,
+                Orientation::Horizontal => idx + 1,
+            };
+
+            op.handle(self, idx, new_idx);
+        }
+    }
+
+    pub fn window_op_next(&mut self, op: DirectionOperation) {
         let idx = self.get_foreground_window_index();
         let can_move = self.windows.len() > 1;
 
@@ -143,7 +201,7 @@ impl Workspace {
         }
     }
 
-    pub fn swap_window_previous(&mut self, op: DirectionOperation) {
+    pub fn window_op_previous(&mut self, op: DirectionOperation) {
         let idx = self.get_foreground_window_index();
         let can_move = self.windows.len() > 1;
 
@@ -165,7 +223,13 @@ impl Workspace {
 
     pub fn calculate_layout(&mut self) {
         let len = self.windows.iter().filter(|x| x.should_tile).count();
-        self.layout = bsp(0, len, self.dimensions, 1, self.gaps);
+        self.layout = bsp(
+            0,
+            len,
+            self.dimensions,
+            self.orientation as usize,
+            self.gaps,
+        );
     }
 
     pub fn apply_layout(&self, new_focus: Option<usize>) {
@@ -201,6 +265,7 @@ impl Default for Workspace {
             layout:            vec![],
             foreground_window: Window::default(),
             gaps:              5,
+            orientation:       Orientation::Vertical,
         };
 
         workspace.get_dimensions();

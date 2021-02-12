@@ -13,7 +13,7 @@ use lazy_static::lazy_static;
 use log::{debug, error, info};
 use uds_windows::UnixListener;
 
-use yatta_core::{OperationDirection, Sizing, SocketMessage};
+use yatta_core::{OperationDirection, Orientation, Sizing, SocketMessage};
 
 use crate::{
     rect::Rect,
@@ -139,10 +139,12 @@ fn handle_windows_event_message(ev: WindowsEvent, workspace: Arc<Mutex<Workspace
         }
         WindowsEventType::Hide | WindowsEventType::Destroy => {
             let index = ev.window.get_index(&workspace.windows);
+            let mut previous = index.unwrap_or(0);
+            previous = if previous == 0 { 0 } else { previous - 1 };
 
             workspace.windows.retain(|x| !ev.window.eq(x));
             workspace.calculate_layout();
-            workspace.apply_layout(index);
+            workspace.apply_layout(Option::from(previous));
         }
         WindowsEventType::FocusChange => {
             let mut current = workspace.windows.clone();
@@ -195,22 +197,22 @@ fn handle_socket_message(
                     match msg {
                         SocketMessage::FocusWindow(direction) => match direction {
                             OperationDirection::Left => {
-                                workspace.move_window_left(DirectionOperation::Focus)
+                                workspace.window_op_left(DirectionOperation::Focus)
                             }
                             OperationDirection::Right => {
-                                workspace.move_window_right(DirectionOperation::Focus)
+                                workspace.window_op_right(DirectionOperation::Focus)
                             }
                             OperationDirection::Up => {
-                                workspace.move_window_up(DirectionOperation::Focus)
+                                workspace.window_op_up(DirectionOperation::Focus)
                             }
                             OperationDirection::Down => {
-                                workspace.move_window_down(DirectionOperation::Focus)
+                                workspace.window_op_down(DirectionOperation::Focus)
                             }
                             OperationDirection::Previous => {
-                                workspace.swap_window_previous(DirectionOperation::Focus)
+                                workspace.window_op_previous(DirectionOperation::Focus)
                             }
                             OperationDirection::Next => {
-                                workspace.swap_window_next(DirectionOperation::Focus)
+                                workspace.window_op_next(DirectionOperation::Focus)
                             }
                         },
                         SocketMessage::Promote => {
@@ -261,22 +263,22 @@ fn handle_socket_message(
                         }
                         SocketMessage::MoveWindow(direction) => match direction {
                             OperationDirection::Left => {
-                                workspace.move_window_left(DirectionOperation::Move)
+                                workspace.window_op_left(DirectionOperation::Move)
                             }
                             OperationDirection::Right => {
-                                workspace.move_window_right(DirectionOperation::Move)
+                                workspace.window_op_right(DirectionOperation::Move)
                             }
                             OperationDirection::Up => {
-                                workspace.move_window_up(DirectionOperation::Move)
+                                workspace.window_op_up(DirectionOperation::Move)
                             }
                             OperationDirection::Down => {
-                                workspace.move_window_down(DirectionOperation::Move)
+                                workspace.window_op_down(DirectionOperation::Move)
                             }
                             OperationDirection::Previous => {
-                                workspace.swap_window_previous(DirectionOperation::Move)
+                                workspace.window_op_previous(DirectionOperation::Move)
                             }
                             OperationDirection::Next => {
-                                workspace.swap_window_next(DirectionOperation::Move)
+                                workspace.window_op_next(DirectionOperation::Move)
                             }
                         },
                         SocketMessage::SetGapSize(size) => {
@@ -295,6 +297,20 @@ fn handle_socket_message(
                                     workspace.set_gaps(gaps - 1);
                                 }
                             }
+
+                            workspace.calculate_layout();
+                            workspace.apply_layout(None);
+                        }
+                        SocketMessage::SetOrientation(orientation) => {
+                            workspace.orientation = orientation;
+                            workspace.calculate_layout();
+                            workspace.apply_layout(None);
+                        }
+                        SocketMessage::ToggleOrientation => {
+                            workspace.orientation = match workspace.orientation {
+                                Orientation::Horizontal => Orientation::Vertical,
+                                Orientation::Vertical => Orientation::Horizontal,
+                            };
 
                             workspace.calculate_layout();
                             workspace.apply_layout(None);

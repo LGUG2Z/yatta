@@ -5,14 +5,16 @@ use strum::{Display, EnumString};
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Display)]
 pub enum SocketMessage {
+    AdjustGaps(Sizing),
     FocusWindow(OperationDirection),
     MoveWindow(OperationDirection),
     Promote,
-    TogglePause,
-    ToggleFloat,
     Retile,
     SetGapSize(i32),
-    AdjustGaps(Sizing),
+    SetOrientation(Orientation),
+    ToggleFloat,
+    ToggleOrientation,
+    TogglePause,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Display, EnumString)]
@@ -25,6 +27,14 @@ pub enum OperationDirection {
     Down,
     Previous,
     Next,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Display, EnumString)]
+#[strum(serialize_all = "snake_case")]
+#[derive(Clap)]
+pub enum Orientation {
+    Horizontal = 0,
+    Vertical   = 1,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Display, EnumString)]
