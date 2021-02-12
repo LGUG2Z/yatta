@@ -92,44 +92,34 @@ extern "system" fn handler(
     };
 
     let event_code = unsafe { ::std::mem::transmute(event) };
-    if window.should_manage() {
-        let event_type = match WindowsEventType::from_event_code(event_code) {
-            Some(event) => event,
-            None => {
-                // Some apps like Firefox don't send ObjectCreate or ObjectShow on launch
-                // This spams the message queue, but I don't know what else to do. On launch
-                // it only sends the following WinEvents :/
-                //
-                // [yatta\src\windows_event.rs:110] event = 32780
-                // [yatta\src\windows_event.rs:111] event_code = ObjectNameChange
-                // [yatta\src\windows_event.rs:110] event = 32779
-                // [yatta\src\windows_event.rs:111] event_code = ObjectLocationChange
-                // [yatta\src\windows_event.rs:110] event = 32779
-                // [yatta\src\windows_event.rs:111] event_code = ObjectLocationChange
-                // [yatta\src\windows_event.rs:110] event = 32780
-                // [yatta\src\windows_event.rs:111] event_code = ObjectNameChange
-                if event_code == WinEventCode::ObjectNameChange
-                    && window.is_visible()
-                    && window.get_title().is_some()
-                    && window.get_title().unwrap().contains("Firefox")
-                {
-                    WindowsEventType::Show
-                } else {
-                    return;
-                }
+    let event_type = match WindowsEventType::from_event_code(event_code) {
+        Some(event) => event,
+        None => {
+            // Some apps like Firefox don't send ObjectCreate or ObjectShow on launch
+            // This spams the message queue, but I don't know what else to do. On launch
+            // it only sends the following WinEvents :/
+            //
+            // [yatta\src\windows_event.rs:110] event = 32780
+            // [yatta\src\windows_event.rs:111] event_code = ObjectNameChange
+            // [yatta\src\windows_event.rs:110] event = 32779
+            // [yatta\src\windows_event.rs:111] event_code = ObjectLocationChange
+            // [yatta\src\windows_event.rs:110] event = 32779
+            // [yatta\src\windows_event.rs:111] event_code = ObjectLocationChange
+            // [yatta\src\windows_event.rs:110] event = 32780
+            // [yatta\src\windows_event.rs:111] event_code = ObjectNameChange
+            if event_code == WinEventCode::ObjectNameChange
+                && window.is_visible()
+                && window.get_title().is_some()
+                && window.get_title().unwrap().contains("Firefox")
+            {
+                WindowsEventType::Show
+            } else {
+                return;
             }
-        };
+        }
+    };
 
-        // println!(
-        //     "{} {:?} {} {} {} {}",
-        //     window.get_title().unwrap(),
-        //     event_code,
-        //     window.is_visible(),
-        //     window.is_minimized(),
-        //     window.info().styles,
-        //     window.info().extended_styles
-        // );
-
+    if window.should_manage(Option::from(event_type)) {
         let event = WindowsEvent {
             event_type,
             event_code,

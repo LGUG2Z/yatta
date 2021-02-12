@@ -25,7 +25,10 @@ use bindings::windows::win32::{
     },
 };
 
-use crate::rect::Rect;
+use crate::{
+    rect::Rect,
+    windows_event::{WindowsEvent, WindowsEventType},
+};
 
 bitflags! {
     #[derive(Default)]
@@ -159,7 +162,7 @@ impl Window {
         self.should_tile = !self.should_tile;
     }
 
-    pub fn should_manage(&self) -> bool {
+    pub fn should_manage(&self, event: Option<WindowsEventType>) -> bool {
         let is_cloaked = self.is_cloaked();
         let has_title = self.get_title().is_some();
         let styles = self.get_style();
@@ -183,13 +186,16 @@ impl Window {
                         );
                         true
                     } else {
-                        debug!(
-                            "should not manage {:?} \n{:?} \n{:?}\n{}",
-                            self.get_title(),
-                            style,
-                            ex_style,
-                            is_cloaked
-                        );
+                        if event.is_some() {
+                            debug!(
+                                "should not manage {:?} {:?} \n{:?} \n{:?}\n{}",
+                                self.get_title(),
+                                event,
+                                style,
+                                ex_style,
+                                is_cloaked
+                            );
+                        }
                         false
                     }
                 }

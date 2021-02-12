@@ -282,11 +282,13 @@ impl Default for Workspace {
 
 extern "system" fn enum_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
     let windows = unsafe { &mut *(lparam.0 as *mut Vec<Window>) };
+
     let w = Window {
         hwnd,
         should_tile: true,
     };
-    if w.is_visible() && !w.is_minimized() && w.should_manage() {
+
+    if w.is_visible() && !w.is_minimized() && w.should_manage(None) {
         windows.push(w)
     }
 
