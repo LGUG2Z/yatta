@@ -25,10 +25,7 @@ use bindings::windows::win32::{
     },
 };
 
-use crate::{
-    rect::Rect,
-    windows_event::{WindowsEvent, WindowsEventType},
-};
+use crate::{rect::Rect, windows_event::WindowsEventType};
 
 bitflags! {
     #[derive(Default)]
