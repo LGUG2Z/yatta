@@ -3,7 +3,7 @@ use std::io::Write;
 use clap::Clap;
 use uds_windows::UnixStream;
 
-use yatta_core::{OperationDirection, Orientation, Sizing, SocketMessage};
+use yatta_core::{CycleDirection, Layout, OperationDirection, Sizing, SocketMessage};
 
 #[derive(Clap)]
 #[clap(version = "1.0", author = "Jade I. <jadeiqbal@fastmail.com>")]
@@ -19,10 +19,10 @@ enum SubCommand {
     Move(OperationDirection),
     Promote,
     Retile,
-    SetGapSize(Gap),
-    SetOrientation(Orientation),
+    GapSize(Gap),
+    Layout(Layout),
+    CycleLayout(CycleDirection),
     ToggleFloat,
-    ToggleOrientation,
     TogglePause,
 }
 
@@ -70,8 +70,8 @@ fn main() {
             let bytes = SocketMessage::MoveWindow(direction).as_bytes().unwrap();
             send_message(&*bytes);
         }
-        SubCommand::SetGapSize(gap) => {
-            let bytes = SocketMessage::SetGapSize(gap.size).as_bytes().unwrap();
+        SubCommand::GapSize(gap) => {
+            let bytes = SocketMessage::GapSize(gap.size).as_bytes().unwrap();
             send_message(&*bytes);
         }
         SubCommand::AdjustGaps(sizing) => {
@@ -82,14 +82,12 @@ fn main() {
             let bytes = SocketMessage::ToggleFloat.as_bytes().unwrap();
             send_message(&*bytes);
         }
-        SubCommand::SetOrientation(orientation) => {
-            let bytes = SocketMessage::SetOrientation(orientation)
-                .as_bytes()
-                .unwrap();
+        SubCommand::Layout(layout) => {
+            let bytes = SocketMessage::Layout(layout).as_bytes().unwrap();
             send_message(&*bytes);
         }
-        SubCommand::ToggleOrientation => {
-            let bytes = SocketMessage::ToggleOrientation.as_bytes().unwrap();
+        SubCommand::CycleLayout(direction) => {
+            let bytes = SocketMessage::CycleLayout(direction).as_bytes().unwrap();
             send_message(&*bytes);
         }
     }

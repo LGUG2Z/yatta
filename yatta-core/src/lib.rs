@@ -10,10 +10,10 @@ pub enum SocketMessage {
     MoveWindow(OperationDirection),
     Promote,
     Retile,
-    SetGapSize(i32),
-    SetOrientation(Orientation),
+    Layout(Layout),
+    CycleLayout(CycleDirection),
+    GapSize(i32),
     ToggleFloat,
-    ToggleOrientation,
     TogglePause,
 }
 
@@ -32,9 +32,42 @@ pub enum OperationDirection {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Display, EnumString)]
 #[strum(serialize_all = "snake_case")]
 #[derive(Clap)]
-pub enum Orientation {
-    Horizontal = 0,
-    Vertical   = 1,
+pub enum Layout {
+    BSPV,
+    BSPH,
+    Columns,
+    Rows,
+    Monocle,
+}
+
+impl Layout {
+    pub fn next(&mut self) {
+        match self {
+            Layout::BSPV => *self = Layout::BSPH,
+            Layout::BSPH => *self = Layout::Columns,
+            Layout::Columns => *self = Layout::Rows,
+            Layout::Rows => *self = Layout::Monocle,
+            Layout::Monocle => *self = Layout::BSPV,
+        }
+    }
+
+    pub fn previous(&mut self) {
+        match self {
+            Layout::BSPV => *self = Layout::Monocle,
+            Layout::BSPH => *self = Layout::BSPV,
+            Layout::Columns => *self = Layout::BSPH,
+            Layout::Rows => *self = Layout::Columns,
+            Layout::Monocle => *self = Layout::Rows,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Display, EnumString)]
+#[strum(serialize_all = "snake_case")]
+#[derive(Clap)]
+pub enum CycleDirection {
+    Previous,
+    Next,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Display, EnumString)]

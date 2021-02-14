@@ -13,7 +13,7 @@ use lazy_static::lazy_static;
 use log::{debug, error, info};
 use uds_windows::UnixListener;
 
-use yatta_core::{OperationDirection, Orientation, Sizing, SocketMessage};
+use yatta_core::{CycleDirection, OperationDirection, Sizing, SocketMessage};
 
 use crate::{
     rect::Rect,
@@ -230,7 +230,7 @@ fn handle_socket_message(
                             workspace.calculate_layout();
                             workspace.apply_layout(Option::from(0));
                             let window = workspace.windows.get(0).unwrap();
-                            window.set_cursor_pos(workspace.layout[0]);
+                            window.set_cursor_pos(workspace.layout_dimensions[0]);
                         }
                         SocketMessage::TogglePause => {
                             workspace.paused = !workspace.paused;
@@ -258,7 +258,7 @@ fn handle_socket_message(
                                 window.set_cursor_pos(center);
                             } else {
                                 // Make sure the mouse cursor goes back once we reenable tiling
-                                window.set_cursor_pos(workspace.layout[idx]);
+                                window.set_cursor_pos(workspace.layout_dimensions[idx]);
                             }
                         }
                         SocketMessage::Retile => {
@@ -288,36 +288,36 @@ fn handle_socket_message(
                                 workspace.window_op_next(DirectionOperation::Move)
                             }
                         },
-                        SocketMessage::SetGapSize(size) => {
-                            workspace.set_gaps(size);
+                        SocketMessage::GapSize(size) => {
+                            workspace.gaps = size;
                             workspace.calculate_layout();
                             workspace.apply_layout(None);
                         }
                         SocketMessage::AdjustGaps(sizing) => {
-                            let gaps = workspace.gaps;
-
                             match sizing {
                                 Sizing::Increase => {
-                                    workspace.set_gaps(gaps + 1);
+                                    workspace.gaps += 1;
                                 }
                                 Sizing::Decrease => {
-                                    workspace.set_gaps(gaps - 1);
+                                    if workspace.gaps > 0 {
+                                        workspace.gaps -= 1;
+                                    }
                                 }
                             }
 
                             workspace.calculate_layout();
                             workspace.apply_layout(None);
                         }
-                        SocketMessage::SetOrientation(orientation) => {
-                            workspace.orientation = orientation;
+                        SocketMessage::Layout(layout) => {
+                            workspace.layout = layout;
                             workspace.calculate_layout();
                             workspace.apply_layout(None);
                         }
-                        SocketMessage::ToggleOrientation => {
-                            workspace.orientation = match workspace.orientation {
-                                Orientation::Horizontal => Orientation::Vertical,
-                                Orientation::Vertical => Orientation::Horizontal,
-                            };
+                        SocketMessage::CycleLayout(direction) => {
+                            match direction {
+                                CycleDirection::Previous => workspace.layout.previous(),
+                                CycleDirection::Next => workspace.layout.next(),
+                            }
 
                             workspace.calculate_layout();
                             workspace.apply_layout(None);
