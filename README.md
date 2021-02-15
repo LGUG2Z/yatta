@@ -42,68 +42,60 @@ to manage my window management keyboard shortcuts. Here is a sample `yatta.ahk` 
 starting point for your own:
 
 ```ahk
-; Change the focused window, Alt + Vim direction keys
 !h::
-Run, yattac.exe focus left
+Run, yattac.exe focus left, Hide
 return
 
 !j::
-Run, yattac.exe focus down
+Run, yattac.exe focus down, Hide
 return
 
 !k::
-Run, yattac.exe focus up
+Run, yattac.exe focus up, Hide
 return
 
 !l::
-Run, yattac.exe focus right
+Run, yattac.exe focus right, Hide
 return
 
-; Move the focused window in a given direction, Alt + Shift + Vim direction keys
 !+h::
-Run, yattac.exe move left
+Run, yattac.exe move left, Hide
 return
 
 !+j::
-Run, yattac.exe move down
+Run, yattac.exe move down, Hide
 return
 
 !+k::
-Run, yattac.exe move up
+Run, yattac.exe move up, Hide
 return
 
 !+l::
-Run, yattac.exe move right
+Run, yattac.exe move right, Hide
 return
 
-; Promote the focused window to the top of the tree, Alt + Shift + Enter
 !+Enter::
-Run, yattac.exe promote
+Run, yattac.exe promote, Hide
 return
 
-; Switch to an equal-width, max-height column layout, Alt + Shift + C
 !+c::
-Run, yattac.exe layout columns
+Run, yattac.exe layout columns, Hide
 return
 
-; Switch to the default vertical bsp tiling layout, Alt + Shift + T
 !+t::
-Run, yattac.exe layout bspv
+Run, yattac.exe layout bspv, Hide
 return
 
-; Force a retile if things get janky, Alt + Shift + R
 !+r::
-Run, yattac.exe retile
+Run, yattac.exe retile, Hide
 return
 
-; Float the focused window, Alt + Shift + F
 !+f::
-Run, yattac.exe toggle-float
+Run, yattac.exe toggle-float, Hide
 return
 
-; Pause listening to any window events or yattac commands, Alt + P
 !p::
-Run, yattac.exe toggle-pause
+Run, yattac.exe toggle-pause, Hide
 return
 ```
 

@@ -109,8 +109,8 @@ extern "system" fn handler(
             // [yatta\src\windows_event.rs:111] event_code = ObjectNameChange
             if event_code == WinEventCode::ObjectNameChange
                 && window.is_visible()
-                && window.get_title().is_some()
-                && window.get_title().unwrap().contains("Firefox")
+                && window.title().is_some()
+                && window.title().unwrap().contains("Firefox")
             {
                 WindowsEventType::Show
             } else {
@@ -124,7 +124,7 @@ extern "system" fn handler(
             event_type,
             event_code,
             window,
-            title: window.get_title(),
+            title: window.title(),
         };
 
         // Need to expand this blacklist of windows that aren't visible but end up
@@ -144,7 +144,7 @@ extern "system" fn handler(
             Some(String::from("Discord Updater")), // When starting Discord
         ];
 
-        if !blacklist.contains(&window.get_title()) {
+        if !blacklist.contains(&window.title()) {
             WINDOWS_EVENT_CHANNEL
                 .lock()
                 .unwrap()
@@ -153,7 +153,7 @@ extern "system" fn handler(
                 .expect("Failed to forward WindowsEvent");
         }
     } else {
-        debug!("ignored event from {:?} {}", window.get_title(), event_code);
+        debug!("ignored event from {:?} {}", window.title(), event_code);
     }
 }
 

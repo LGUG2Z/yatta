@@ -15,8 +15,10 @@ use bindings::windows::win32::{
         GetWindowLongW,
         GetWindowRect,
         GetWindowTextW,
+        GetWindowThreadProcessId,
         IsIconic,
         IsWindowVisible,
+        RealGetWindowClassW,
         SetForegroundWindow,
         SetWindowPos,
         ShowWindow,
@@ -119,6 +121,48 @@ impl Window {
         }
     }
 
+    pub fn class(&self) -> Result<String> {
+        const BUF_SIZE: usize = 512;
+        let mut buff: [u16; BUF_SIZE] = [0; BUF_SIZE];
+
+        let writ_chars =
+            unsafe { RealGetWindowClassW(self.hwnd, buff.as_mut_ptr(), BUF_SIZE as u32) };
+
+        if writ_chars == 0 {
+            return Err(std::io::Error::last_os_error().into());
+        }
+
+        Ok(String::from_utf16_lossy(&buff[0..writ_chars as usize]))
+    }
+
+    pub fn thread_process_id(&self) -> (u32, u32) {
+        let mut process_pid: u32 = 0;
+        let thread_pid = unsafe { GetWindowThreadProcessId(self.hwnd, &mut process_pid) };
+
+        (process_pid, thread_pid)
+    }
+
+    pub fn exe_path(&self) -> Result<String> {
+        let (pid, _) = self.thread_process_id();
+        // PROCESS_QUERY_INFORMATION (0x0400)
+        // https://docs.microsoft.com/en-us/windows/win32/procthread/process-security-and-access-rights
+        let handle = unsafe { OpenProcess(0x0400, false.into(), pid) };
+
+        let mut buf_len = 260_u32;
+        let mut result: Vec<u16> = vec![0; buf_len as usize];
+        let text_ptr = result.as_mut_ptr();
+
+        unsafe {
+            let success: bool =
+                QueryFullProcessImageNameW(handle, 0, text_ptr, &mut buf_len as *mut u32).into();
+            if !success {
+                return Err(std::io::Error::last_os_error().into());
+            }
+        }
+
+        Ok(String::from_utf16_lossy(&result[..buf_len as usize]))
+    }
+
     pub fn rect(self) -> Rect {
         unsafe {
             let mut rect = mem::zeroed();
@@ -161,7 +205,7 @@ impl Window {
 
     pub fn should_manage(&self, event: Option<WindowsEventType>) -> bool {
         let is_cloaked = self.is_cloaked();
-        let has_title = self.get_title().is_some();
+        let has_title = self.title().is_some();
         let styles = self.get_style();
         let extended_styles = self.get_ex_style();
 
@@ -177,7 +221,7 @@ impl Window {
                     {
                         debug!(
                             "should manage {:?} \n{:?} \n{:?}",
-                            self.get_title(),
+                            self.title(),
                             style,
                             ex_style
                         );
@@ -186,7 +230,7 @@ impl Window {
                         if event.is_some() {
                             debug!(
                                 "should not manage {:?} {:?} \n{:?} \n{:?}\n{}",
-                                self.get_title(),
+                                self.title(),
                                 event,
                                 style,
                                 ex_style,
@@ -210,7 +254,7 @@ impl Window {
         }
     }
 
-    pub fn get_title(self) -> Option<String> {
+    pub fn title(self) -> Option<String> {
         let mut text: [u16; 512] = [0; 512];
         let len = unsafe { GetWindowTextW(self.hwnd, text.as_mut_ptr(), text.len() as i32) };
         let text = String::from_utf16_lossy(&text[..len as usize]);
@@ -222,7 +266,7 @@ impl Window {
         }
     }
 
-    pub fn get_index(self, windows: &[Window]) -> Option<usize> {
+    pub fn index(self, windows: &[Window]) -> Option<usize> {
         for (i, window) in windows.iter().enumerate() {
             if window.hwnd == self.hwnd {
                 return Some(i);

@@ -142,7 +142,7 @@ fn handle_windows_event_message(ev: WindowsEvent, workspace: Arc<Mutex<Workspace
             }
         }
         WindowsEventType::Hide | WindowsEventType::Destroy => {
-            let index = ev.window.get_index(&workspace.windows);
+            let index = ev.window.index(&workspace.windows);
             let mut previous = index.unwrap_or(0);
             previous = if previous == 0 { 0 } else { previous - 1 };
 
@@ -265,7 +265,7 @@ fn handle_socket_message(
                             workspace.get_visible_windows();
                             workspace.get_foreground_window();
                             workspace.calculate_layout();
-                            let idx = workspace.foreground_window.get_index(&workspace.windows);
+                            let idx = workspace.foreground_window.index(&workspace.windows);
                             workspace.apply_layout(idx);
                         }
                         SocketMessage::MoveWindow(direction) => match direction {
