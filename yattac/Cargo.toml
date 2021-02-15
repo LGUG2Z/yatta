@@ -11,4 +11,5 @@ yatta-core = { path = "../yatta-core"}
 
 clap = "3.0.0-beta.2"
 dirs = "3.0.1"
+powershell_script = "0.1.5"
 uds_windows = "1.0.1"

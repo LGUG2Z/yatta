@@ -307,6 +307,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "afb2e1c3ee07430c2cf76151675e583e0f19985fa6efae47d6848a3e2c824f85"
 
 [[package]]
+name = "powershell_script"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "232c43ca4a2aec888dbdcf0167ad05c228692624d5b75b0a775ef4065ca8b03e"
+
+[[package]]
 name = "proc-macro-error"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -744,6 +750,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "dirs",
+ "powershell_script",
  "uds_windows",
  "yatta-core",
 ]

@@ -24,6 +24,8 @@ enum SubCommand {
     CycleLayout(CycleDirection),
     ToggleFloat,
     TogglePause,
+    Start,
+    Stop,
 }
 
 #[derive(Clap)]
@@ -89,6 +91,28 @@ fn main() {
         SubCommand::CycleLayout(direction) => {
             let bytes = SocketMessage::CycleLayout(direction).as_bytes().unwrap();
             send_message(&*bytes);
+        }
+        SubCommand::Start => {
+            let script = r#"Start-Process yatta -WindowStyle hidden"#;
+            match powershell_script::run(script, true) {
+                Ok(output) => {
+                    println!("{}", output);
+                }
+                Err(e) => {
+                    println!("Error: {}", e);
+                }
+            }
+        }
+        SubCommand::Stop => {
+            let script = r#"Stop-Process -Name yatta"#;
+            match powershell_script::run(script, true) {
+                Ok(output) => {
+                    println!("{}", output);
+                }
+                Err(e) => {
+                    println!("Error: {}", e);
+                }
+            }
         }
     }
 }
