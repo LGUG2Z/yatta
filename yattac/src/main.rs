@@ -28,6 +28,7 @@ enum SubCommand {
     Stop,
     FloatClass(Target),
     FloatExe(Target),
+    FloatTitle(Target),
 }
 
 #[derive(Clap)]
@@ -127,6 +128,10 @@ fn main() {
         }
         SubCommand::FloatExe(target) => {
             let bytes = SocketMessage::FloatExe(target.id).as_bytes().unwrap();
+            send_message(&*bytes);
+        }
+        SubCommand::FloatTitle(target) => {
+            let bytes = SocketMessage::FloatTitle(target.id).as_bytes().unwrap();
             send_message(&*bytes);
         }
     }

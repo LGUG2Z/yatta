@@ -43,9 +43,21 @@ to manage my window management keyboard shortcuts. Here is a sample `yatta.ahk` 
 starting point for your own:
 
 ```ahk
-Run, yattac.exe float-class SunAwtDialog, Hide ; Always float IntelliJ popups
-Run, yattac.exe float-class CabinetWClass, Hide ; Always float Control Panel
+; Start yatta, this command makes sure no duplicate processes will be created
+Run, yattac.exe start, Hide
+
+; Send the configuration options for yatta here
+;
+; Always float IntelliJ popups, matching on class
+Run, yattac.exe float-class SunAwtDialog, Hide
+; Always float Control Panel, matching on class
+Run, yattac.exe float-class CabinetWClass, Hide
+; Always float Task Manager, matching on class
+Run, yattac.exe float-class TaskManagerWindow, Hide
+; Always float Wally, matching on executable name
 Run, yattac.exe float-exe Wally.exe, Hide
+; Always float Calculator app, matching on window title
+Run, yattac.exe float-title Calculator, Hide
 
 ; Change the focused window, Alt + Vim direction keys
 !h::

@@ -3,6 +3,7 @@ extern crate num_traits;
 
 use std::{
     io::{BufRead, BufReader, ErrorKind},
+    process::exit,
     sync::{Arc, Mutex},
     thread,
 };
@@ -11,6 +12,7 @@ use anyhow::Result;
 use crossbeam_channel::{select, unbounded, Receiver, Sender};
 use lazy_static::lazy_static;
 use log::{debug, error, info};
+use sysinfo::SystemExt;
 use uds_windows::UnixListener;
 
 use yatta_core::{CycleDirection, OperationDirection, Sizing, SocketMessage};
@@ -32,6 +34,7 @@ lazy_static! {
         Arc::new(Mutex::new(unbounded()));
     static ref FLOAT_CLASSES: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
     static ref FLOAT_EXES: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
+    static ref FLOAT_TITLES: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
 }
 
 #[derive(Clone, Debug)]
@@ -42,6 +45,15 @@ pub enum Message {
 fn main() -> Result<()> {
     std::env::set_var("RUST_LOG", "INFO");
     env_logger::init();
+
+    let mut system = sysinfo::System::new_all();
+    system.refresh_processes();
+
+    if system.get_process_by_name("yatta.exe").len() > 1 {
+        error!("yatta.exe is already running, please exit the existing process before starting a new one");
+        exit(1);
+    }
+
     let workspace: Arc<Mutex<Workspace>> = Arc::new(Mutex::new(Workspace::default()));
     info!("loaded workspace: {:?}", &workspace.lock().unwrap());
 
@@ -335,6 +347,12 @@ fn handle_socket_message(
                             let mut float_exes = FLOAT_EXES.lock().unwrap();
                             if !float_exes.contains(&target) {
                                 float_exes.push(target)
+                            }
+                        }
+                        SocketMessage::FloatTitle(target) => {
+                            let mut float_titles = FLOAT_TITLES.lock().unwrap();
+                            if !float_titles.contains(&target) {
+                                float_titles.push(target)
                             }
                         }
                     }

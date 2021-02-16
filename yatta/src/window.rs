@@ -27,7 +27,7 @@ use bindings::windows::win32::{
     },
 };
 
-use crate::{rect::Rect, windows_event::WindowsEventType, FLOAT_CLASSES, FLOAT_EXES};
+use crate::{rect::Rect, windows_event::WindowsEventType, FLOAT_CLASSES, FLOAT_EXES, FLOAT_TITLES};
 
 bitflags! {
     #[derive(Default)]
@@ -125,6 +125,7 @@ impl Window {
     pub fn should_tile(&self) -> bool {
         let classes = FLOAT_CLASSES.lock().unwrap();
         let exes = FLOAT_EXES.lock().unwrap();
+        let titles = FLOAT_TITLES.lock().unwrap();
         let mut should = true;
 
         if !self.tile {
@@ -141,6 +142,14 @@ impl Window {
             let exe = exe_name_from_path(&exe_path);
             if exes.contains(&exe) {
                 should = false
+            }
+        }
+
+        if let Some(title) = self.title() {
+            for t in titles.iter() {
+                if title.contains(t) {
+                    should = false
+                }
             }
         }
 

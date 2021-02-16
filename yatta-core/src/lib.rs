@@ -17,6 +17,7 @@ pub enum SocketMessage {
     TogglePause,
     FloatClass(String),
     FloatExe(String),
+    FloatTitle(String),
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Display, EnumString)]
