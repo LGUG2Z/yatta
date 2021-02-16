@@ -27,7 +27,7 @@ use bindings::windows::win32::{
     },
 };
 
-use crate::{rect::Rect, windows_event::WindowsEventType};
+use crate::{rect::Rect, windows_event::WindowsEventType, FLOAT_CLASSES, FLOAT_EXES};
 
 bitflags! {
     #[derive(Default)]
@@ -98,8 +98,8 @@ bitflags! {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Window {
-    pub hwnd:        HWND,
-    pub should_tile: bool,
+    pub hwnd: HWND,
+    pub tile: bool,
 }
 
 unsafe impl Send for Window {}
@@ -112,13 +112,39 @@ fn nullable_to_result<T: PartialEq<i32>>(v: T) -> Result<T> {
     }
 }
 
+pub fn exe_name_from_path(path: &str) -> String {
+    path.split('\\').last().unwrap().to_string()
+}
+
 impl Window {
     pub fn foreground() -> Window {
         let hwnd = unsafe { GetForegroundWindow() };
-        Window {
-            hwnd,
-            should_tile: true,
+        Window { hwnd, tile: true }
+    }
+
+    pub fn should_tile(&self) -> bool {
+        let classes = FLOAT_CLASSES.lock().unwrap();
+        let exes = FLOAT_EXES.lock().unwrap();
+        let mut should = true;
+
+        if !self.tile {
+            should = false
         }
+
+        if let Ok(class) = self.class() {
+            if classes.contains(&class) {
+                should = false
+            }
+        }
+
+        if let Ok(exe_path) = self.exe_path() {
+            let exe = exe_name_from_path(&exe_path);
+            if exes.contains(&exe) {
+                should = false
+            }
+        }
+
+        should
     }
 
     pub fn class(&self) -> Result<String> {
@@ -200,7 +226,7 @@ impl Window {
     }
 
     pub fn toggle_float(&mut self) {
-        self.should_tile = !self.should_tile;
+        self.tile = !self.tile;
     }
 
     pub fn should_manage(&self, event: Option<WindowsEventType>) -> bool {
@@ -364,8 +390,8 @@ impl Window {
 impl Default for Window {
     fn default() -> Self {
         Window {
-            hwnd:        HWND(0),
-            should_tile: true,
+            hwnd: HWND(0),
+            tile: true,
         }
     }
 }

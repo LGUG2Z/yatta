@@ -227,7 +227,8 @@ impl Workspace {
     }
 
     pub fn calculate_layout(&mut self) {
-        let len = self.windows.iter().filter(|x| x.should_tile).count();
+        let len = self.windows.iter().filter(|x| x.should_tile()).count();
+
         match self.layout {
             Layout::Monocle => self.layout_dimensions = bsp(0, 1, self.dimensions, 1, self.gaps),
             Layout::BSPV => {
@@ -237,7 +238,7 @@ impl Workspace {
                 self.layout_dimensions = bsp(0, len, self.dimensions, 0, self.gaps);
             }
             Layout::Columns => {
-                let width_f = self.dimensions.width as f32 / self.windows.len() as f32;
+                let width_f = self.dimensions.width as f32 / len as f32;
                 let width = width_f.floor() as i32;
 
                 let mut x = 0;
@@ -254,7 +255,7 @@ impl Workspace {
                 self.layout_dimensions = layouts
             }
             Layout::Rows => {
-                let height_f = self.dimensions.height as f32 / self.windows.len() as f32;
+                let height_f = self.dimensions.height as f32 / len as f32;
                 let height = height_f.floor() as i32;
 
                 let mut y = 0;
@@ -284,7 +285,7 @@ impl Workspace {
 
         let mut skipped = 0;
         for (i, w) in self.windows.iter().enumerate() {
-            if w.should_tile {
+            if w.should_tile() {
                 if let Some(new_idx) = new_focus {
                     // Make sure this is focused
                     if i == new_idx {
@@ -331,10 +332,7 @@ impl Default for Workspace {
 extern "system" fn enum_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
     let windows = unsafe { &mut *(lparam.0 as *mut Vec<Window>) };
 
-    let w = Window {
-        hwnd,
-        should_tile: true,
-    };
+    let w = Window { hwnd, tile: true };
 
     if w.is_visible() && !w.is_minimized() && w.should_manage(None) {
         windows.push(w)

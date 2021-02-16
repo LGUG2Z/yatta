@@ -26,11 +26,18 @@ enum SubCommand {
     TogglePause,
     Start,
     Stop,
+    FloatClass(Target),
+    FloatExe(Target),
 }
 
 #[derive(Clap)]
 struct Gap {
     size: i32,
+}
+
+#[derive(Clap)]
+struct Target {
+    id: String,
 }
 
 pub fn send_message(bytes: &[u8]) {
@@ -113,6 +120,14 @@ fn main() {
                     println!("Error: {}", e);
                 }
             }
+        }
+        SubCommand::FloatClass(target) => {
+            let bytes = SocketMessage::FloatClass(target.id).as_bytes().unwrap();
+            send_message(&*bytes);
+        }
+        SubCommand::FloatExe(target) => {
+            let bytes = SocketMessage::FloatExe(target.id).as_bytes().unwrap();
+            send_message(&*bytes);
         }
     }
 }

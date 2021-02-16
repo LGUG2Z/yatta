@@ -3,7 +3,7 @@ use clap::Clap;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, Display)]
+#[derive(Clone, Debug, Serialize, Deserialize, Display)]
 pub enum SocketMessage {
     AdjustGaps(Sizing),
     FocusWindow(OperationDirection),
@@ -15,6 +15,8 @@ pub enum SocketMessage {
     GapSize(i32),
     ToggleFloat,
     TogglePause,
+    FloatClass(String),
+    FloatExe(String),
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Display, EnumString)]
@@ -79,8 +81,8 @@ pub enum Sizing {
 }
 
 impl SocketMessage {
-    pub fn as_bytes(self) -> Result<Vec<u8>> {
-        Ok(serde_json::to_string(&self)?.as_bytes().to_vec())
+    pub fn as_bytes(&self) -> Result<Vec<u8>> {
+        Ok(serde_json::to_string(self)?.as_bytes().to_vec())
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {

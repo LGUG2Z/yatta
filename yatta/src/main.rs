@@ -30,6 +30,8 @@ mod workspace;
 lazy_static! {
     static ref MESSAGE_CHANNEL: Arc<Mutex<(Sender<Message>, Receiver<Message>)>> =
         Arc::new(Mutex::new(unbounded()));
+    static ref FLOAT_CLASSES: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
+    static ref FLOAT_EXES: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
 }
 
 #[derive(Clone, Debug)]
@@ -242,8 +244,9 @@ fn handle_socket_message(
                             workspace.windows.insert(idx, window);
                             workspace.calculate_layout();
                             workspace.apply_layout(None);
+
                             // Centre the window if we have disabled tiling
-                            if !window.should_tile {
+                            if !window.tile {
                                 let w2 = workspace.dimensions.width / 2;
                                 let h2 = workspace.dimensions.height / 2;
                                 let center = Rect {
@@ -321,6 +324,18 @@ fn handle_socket_message(
 
                             workspace.calculate_layout();
                             workspace.apply_layout(None);
+                        }
+                        SocketMessage::FloatClass(target) => {
+                            let mut float_classes = FLOAT_CLASSES.lock().unwrap();
+                            if !float_classes.contains(&target) {
+                                float_classes.push(target)
+                            }
+                        }
+                        SocketMessage::FloatExe(target) => {
+                            let mut float_exes = FLOAT_EXES.lock().unwrap();
+                            if !float_exes.contains(&target) {
+                                float_exes.push(target)
+                            }
                         }
                     }
                 }

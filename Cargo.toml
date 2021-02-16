@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-   "yatta",
-   "yattac",
-   "yatta-core"
+    "yatta",
+    "yattac",
+    "yatta-core"
 ]

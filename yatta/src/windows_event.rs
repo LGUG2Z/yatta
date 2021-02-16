@@ -86,10 +86,7 @@ extern "system" fn handler(
         return;
     }
 
-    let window = Window {
-        hwnd,
-        should_tile: true,
-    };
+    let window = Window { hwnd, tile: true };
 
     let event_code = unsafe { ::std::mem::transmute(event) };
     let event_type = match WindowsEventType::from_event_code(event_code) {
