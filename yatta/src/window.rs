@@ -244,7 +244,14 @@ impl Window {
         let styles = self.get_style();
         let extended_styles = self.get_ex_style();
 
-        if has_title && !is_cloaked {
+        let mut allow_cloaked = false;
+        if let Some(event) = event {
+            if WindowsEventType::Hide == event {
+                allow_cloaked = true
+            }
+        }
+
+        if has_title && if allow_cloaked { true } else { !is_cloaked } {
             match (styles, extended_styles) {
                 (Ok(style), Ok(ex_style)) => {
                     if style.contains(GwlStyle::CAPTION)

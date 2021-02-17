@@ -26,9 +26,11 @@ enum SubCommand {
     TogglePause,
     Start,
     Stop,
-    FloatClass(Target),
-    FloatExe(Target),
-    FloatTitle(Target),
+    FloatClass(FloatTarget),
+    FloatExe(FloatTarget),
+    FloatTitle(FloatTarget),
+    EnsureDesktops(EnsureDesktopsCount),
+    ExeDesktop(ExeDesktopTarget),
 }
 
 #[derive(Clap)]
@@ -37,8 +39,19 @@ struct Gap {
 }
 
 #[derive(Clap)]
-struct Target {
+struct EnsureDesktopsCount {
+    number: usize,
+}
+
+#[derive(Clap)]
+struct FloatTarget {
     id: String,
+}
+
+#[derive(Clap)]
+struct ExeDesktopTarget {
+    id:      String,
+    desktop: usize,
 }
 
 pub fn send_message(bytes: &[u8]) {
@@ -132,6 +145,18 @@ fn main() {
         }
         SubCommand::FloatTitle(target) => {
             let bytes = SocketMessage::FloatTitle(target.id).as_bytes().unwrap();
+            send_message(&*bytes);
+        }
+        SubCommand::EnsureDesktops(count) => {
+            let bytes = SocketMessage::EnsureDesktops(count.number)
+                .as_bytes()
+                .unwrap();
+            send_message(&*bytes);
+        }
+        SubCommand::ExeDesktop(target) => {
+            let bytes = SocketMessage::ExeDesktop(target.id, target.desktop)
+                .as_bytes()
+                .unwrap();
             send_message(&*bytes);
         }
     }

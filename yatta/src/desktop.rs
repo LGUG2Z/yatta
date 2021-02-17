@@ -15,7 +15,7 @@ use yatta_core::Layout;
 use crate::{rect::Rect, window::Window, DirectionOperation};
 
 #[derive(Debug, Clone)]
-pub struct Workspace {
+pub struct Desktop {
     pub dimensions:        Rect,
     pub windows:           Vec<Window>,
     pub layout_dimensions: Vec<Rect>,
@@ -27,7 +27,7 @@ pub struct Workspace {
 
 pub const PADDING: i32 = 20;
 
-impl Workspace {
+impl Desktop {
     pub fn get_dimensions(&mut self) {
         let active_monitor = unsafe {
             let mut cursor_pos: POINT = mem::zeroed();
@@ -307,9 +307,9 @@ impl Workspace {
     }
 }
 
-impl Default for Workspace {
+impl Default for Desktop {
     fn default() -> Self {
-        let mut workspace = Workspace {
+        let mut desktop = Desktop {
             dimensions:        Rect::zero(),
             windows:           vec![],
             layout_dimensions: vec![],
@@ -319,13 +319,13 @@ impl Default for Workspace {
             paused:            false,
         };
 
-        workspace.get_dimensions();
-        workspace.get_visible_windows();
-        workspace.get_foreground_window();
-        workspace.calculate_layout();
-        workspace.apply_layout(None);
+        desktop.get_dimensions();
+        desktop.get_visible_windows();
+        desktop.get_foreground_window();
+        desktop.calculate_layout();
+        desktop.apply_layout(None);
 
-        workspace
+        desktop
     }
 }
 

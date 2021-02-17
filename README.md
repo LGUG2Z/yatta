@@ -48,6 +48,14 @@ Run, yattac.exe start, Hide
 
 ; Send the configuration options for yatta here
 ;
+; Ensure there are 3 virtual desktops
+Run, yattac.exe ensure-desktops 3, Hide
+
+; Always open Signal in Desktop 2
+Run, yattac.exe exe-desktop Signal.exe 2, Hide
+; Always open Ferdi in Desktop 2
+Run, yattac.exe exe-desktop Ferdi.exe 2, Hide
+
 ; Always float IntelliJ popups, matching on class
 Run, yattac.exe float-class SunAwtDialog, Hide
 ; Always float Control Panel, matching on class

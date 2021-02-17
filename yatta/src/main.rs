@@ -2,6 +2,7 @@
 extern crate num_traits;
 
 use std::{
+    collections::HashMap,
     io::{BufRead, BufReader, ErrorKind},
     process::exit,
     sync::{Arc, Mutex},
@@ -14,20 +15,26 @@ use lazy_static::lazy_static;
 use log::{debug, error, info};
 use sysinfo::SystemExt;
 use uds_windows::UnixListener;
+use winvd::{
+    create_desktop,
+    get_desktops,
+    helpers::{get_desktop_number_by_window, move_window_to_desktop_number},
+};
 
 use yatta_core::{CycleDirection, OperationDirection, Sizing, SocketMessage};
 
 use crate::{
+    desktop::Desktop,
     rect::Rect,
+    window::exe_name_from_path,
     windows_event::{WindowsEvent, WindowsEventListener, WindowsEventType},
-    workspace::Workspace,
 };
 
+mod desktop;
 mod message_loop;
 mod rect;
 mod window;
 mod windows_event;
-mod workspace;
 
 lazy_static! {
     static ref MESSAGE_CHANNEL: Arc<Mutex<(Sender<Message>, Receiver<Message>)>> =
@@ -35,6 +42,8 @@ lazy_static! {
     static ref FLOAT_CLASSES: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
     static ref FLOAT_EXES: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
     static ref FLOAT_TITLES: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
+    static ref DESKTOP_EXES: Arc<Mutex<HashMap<String, usize>>> =
+        Arc::new(Mutex::new(HashMap::new()));
 }
 
 #[derive(Clone, Debug)]
@@ -54,8 +63,8 @@ fn main() -> Result<()> {
         exit(1);
     }
 
-    let workspace: Arc<Mutex<Workspace>> = Arc::new(Mutex::new(Workspace::default()));
-    info!("loaded workspace: {:?}", &workspace.lock().unwrap());
+    let desktop: Arc<Mutex<Desktop>> = Arc::new(Mutex::new(Desktop::default()));
+    info!("loaded desktop: {:?}", &desktop.lock().unwrap());
 
     let listener = Arc::new(Mutex::new(WindowsEventListener::default()));
     listener.lock().unwrap().start();
@@ -85,13 +94,13 @@ fn main() -> Result<()> {
 
     info!("starting listening on socket: {}", socket.to_str().unwrap());
 
-    let workspace_clone = workspace.clone();
+    let desktop_clone = desktop.clone();
     thread::spawn(move || {
         for client in stream.incoming() {
             match client {
                 Ok(stream) => {
                     let ls = Arc::clone(&listener);
-                    handle_socket_message(stream, &workspace_clone, ls);
+                    handle_socket_message(stream, &desktop_clone, ls);
                 }
                 Err(err) => {
                     println!("Error: {}", err);
@@ -109,44 +118,65 @@ fn main() -> Result<()> {
                     let msg = maybe_msg.unwrap();
                     let _ = match msg {
                         Message::WindowsEvent(ev) => {
-                            let ws = Arc::clone(&workspace) ;
+                            let ws = Arc::clone(&desktop) ;
                             handle_windows_event_message(ev, ws)
-                    }
+                        },
+
                 };
             }
         }
     }
 }
 
-fn handle_windows_event_message(ev: WindowsEvent, workspace: Arc<Mutex<Workspace>>) {
-    let mut workspace = workspace.lock().unwrap();
-    if workspace.paused {
+fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) {
+    let mut desktop = desktop.lock().unwrap();
+    if desktop.paused {
         return;
+    }
+
+    // Make sure that Desktop rules are enforced whenever there is a new message
+    // received
+    for w in &desktop.windows {
+        if let Ok(path) = w.exe_path() {
+            let exe = exe_name_from_path(&path);
+            if let Some(desktop) = DESKTOP_EXES.lock().unwrap().get(&exe) {
+                if get_desktop_number_by_window(w.hwnd.0 as u32).unwrap() != *desktop {
+                    match move_window_to_desktop_number(w.hwnd.0 as u32, *desktop) {
+                        Ok(_) => {
+                            info!("moved {} to desktop {}", exe, desktop + 1);
+                        }
+                        Err(error) => {
+                            error!("{:?}", error);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     info!("handling windows event: {:?}", &ev);
     match ev.event_type {
         WindowsEventType::Show => {
-            if workspace.windows.is_empty() {
-                workspace.windows.push(ev.window);
-                workspace.calculate_layout();
-                workspace.apply_layout(None);
+            if desktop.windows.is_empty() {
+                desktop.windows.push(ev.window);
+                desktop.calculate_layout();
+                desktop.apply_layout(None);
             } else {
                 // Some apps like Windows Terminal send multiple Events on startup, we don't
                 // want dupes
                 let mut contains = false;
 
-                for window in &workspace.windows {
+                for window in &desktop.windows {
                     if window.hwnd == ev.window.hwnd {
                         contains = true;
                     }
                 }
 
                 if !contains {
-                    let idx = workspace.get_foreground_window_index();
-                    workspace.windows.insert(idx + 1, ev.window);
-                    workspace.calculate_layout();
-                    workspace.apply_layout(None);
+                    let idx = desktop.get_foreground_window_index();
+                    desktop.windows.insert(idx + 1, ev.window);
+                    desktop.calculate_layout();
+                    desktop.apply_layout(None);
                 } else {
                     debug!(
                         "did not retile on show event as window is already shown: {:?}",
@@ -156,23 +186,23 @@ fn handle_windows_event_message(ev: WindowsEvent, workspace: Arc<Mutex<Workspace
             }
         }
         WindowsEventType::Hide | WindowsEventType::Destroy => {
-            let index = ev.window.index(&workspace.windows);
+            let index = ev.window.index(&desktop.windows);
             let mut previous = index.unwrap_or(0);
             previous = if previous == 0 { 0 } else { previous - 1 };
 
-            workspace.windows.retain(|x| !ev.window.eq(x));
-            workspace.calculate_layout();
-            workspace.apply_layout(Option::from(previous));
+            desktop.windows.retain(|x| !ev.window.eq(x));
+            desktop.calculate_layout();
+            desktop.apply_layout(Option::from(previous));
         }
         WindowsEventType::FocusChange => {
-            let mut current = workspace.windows.clone();
-            workspace.get_visible_windows();
-            current.retain(|x| workspace.windows.contains(x));
-            workspace.windows = current;
-            workspace.calculate_layout();
-            workspace.apply_layout(None);
+            let mut current = desktop.windows.clone();
+            desktop.get_visible_windows();
+            current.retain(|x| desktop.windows.contains(x));
+            desktop.windows = current;
+            desktop.calculate_layout();
+            desktop.apply_layout(None);
 
-            workspace.foreground_window = ev.window;
+            desktop.foreground_window = ev.window;
         }
     }
 }
@@ -183,89 +213,79 @@ pub enum DirectionOperation {
 }
 
 impl DirectionOperation {
-    pub fn handle(self, workspace: &mut Workspace, idx: usize, new_idx: usize) {
+    pub fn handle(self, desktop: &mut Desktop, idx: usize, new_idx: usize) {
         match self {
             DirectionOperation::Focus => {
-                workspace.windows.get(new_idx).unwrap().set_foreground();
-                workspace.calculate_layout();
+                desktop.windows.get(new_idx).unwrap().set_foreground();
+                desktop.calculate_layout();
             }
             DirectionOperation::Move => {
-                workspace.windows.swap(idx, new_idx);
-                workspace.calculate_layout();
-                workspace.apply_layout(Option::from(new_idx));
+                desktop.windows.swap(idx, new_idx);
+                desktop.calculate_layout();
+                desktop.apply_layout(Option::from(new_idx));
             }
         }
 
-        workspace.follow_focus_with_mouse(new_idx);
+        desktop.follow_focus_with_mouse(new_idx);
     }
 }
 
 fn handle_socket_message(
     stream: uds_windows::UnixStream,
-    workspace: &Arc<Mutex<Workspace>>,
+    desktop: &Arc<Mutex<Desktop>>,
     _listener: Arc<Mutex<WindowsEventListener>>,
 ) {
-    let mut workspace = workspace.lock().unwrap();
+    let mut d = desktop.lock().unwrap();
     let stream = BufReader::new(stream);
     for line in stream.lines() {
         match line {
             Ok(socket_msg) => {
                 if let Ok(msg) = SocketMessage::from_str(&socket_msg) {
-                    if workspace.paused && !matches!(msg, SocketMessage::TogglePause) {
+                    if d.paused && !matches!(msg, SocketMessage::TogglePause) {
                         return;
                     }
 
                     info!("handling socket message: {:?}", &msg);
                     match msg {
                         SocketMessage::FocusWindow(direction) => match direction {
-                            OperationDirection::Left => {
-                                workspace.window_op_left(DirectionOperation::Focus)
-                            }
+                            OperationDirection::Left => d.window_op_left(DirectionOperation::Focus),
                             OperationDirection::Right => {
-                                workspace.window_op_right(DirectionOperation::Focus)
+                                d.window_op_right(DirectionOperation::Focus)
                             }
-                            OperationDirection::Up => {
-                                workspace.window_op_up(DirectionOperation::Focus)
-                            }
-                            OperationDirection::Down => {
-                                workspace.window_op_down(DirectionOperation::Focus)
-                            }
+                            OperationDirection::Up => d.window_op_up(DirectionOperation::Focus),
+                            OperationDirection::Down => d.window_op_down(DirectionOperation::Focus),
                             OperationDirection::Previous => {
-                                workspace.window_op_previous(DirectionOperation::Focus)
+                                d.window_op_previous(DirectionOperation::Focus)
                             }
-                            OperationDirection::Next => {
-                                workspace.window_op_next(DirectionOperation::Focus)
-                            }
+                            OperationDirection::Next => d.window_op_next(DirectionOperation::Focus),
                         },
                         SocketMessage::Promote => {
-                            let idx = workspace.get_foreground_window_index();
-                            let window = workspace.windows.remove(idx);
-                            workspace.windows.insert(0, window);
-                            workspace.calculate_layout();
-                            workspace.apply_layout(Option::from(0));
-                            let window = workspace.windows.get(0).unwrap();
-                            window.set_cursor_pos(workspace.layout_dimensions[0]);
+                            let idx = d.get_foreground_window_index();
+                            let window = d.windows.remove(idx);
+                            d.windows.insert(0, window);
+                            d.calculate_layout();
+                            d.apply_layout(Option::from(0));
+                            let window = d.windows.get(0).unwrap();
+                            window.set_cursor_pos(d.layout_dimensions[0]);
                         }
                         SocketMessage::TogglePause => {
-                            workspace.paused = !workspace.paused;
+                            d.paused = !d.paused;
                         }
                         SocketMessage::ToggleFloat => {
-                            let idx = workspace.get_foreground_window_index();
-                            let mut window = workspace.windows.remove(idx);
+                            let idx = d.get_foreground_window_index();
+                            let mut window = d.windows.remove(idx);
                             window.toggle_float();
-                            workspace.windows.insert(idx, window);
-                            workspace.calculate_layout();
-                            workspace.apply_layout(None);
+                            d.windows.insert(idx, window);
+                            d.calculate_layout();
+                            d.apply_layout(None);
 
                             // Centre the window if we have disabled tiling
                             if !window.tile {
-                                let w2 = workspace.dimensions.width / 2;
-                                let h2 = workspace.dimensions.height / 2;
+                                let w2 = d.dimensions.width / 2;
+                                let h2 = d.dimensions.height / 2;
                                 let center = Rect {
-                                    x:      workspace.dimensions.x
-                                        + ((workspace.dimensions.width - w2) / 2),
-                                    y:      workspace.dimensions.y
-                                        + ((workspace.dimensions.height - h2) / 2),
+                                    x:      d.dimensions.x + ((d.dimensions.width - w2) / 2),
+                                    y:      d.dimensions.y + ((d.dimensions.height - h2) / 2),
                                     width:  w2,
                                     height: h2,
                                 };
@@ -273,69 +293,61 @@ fn handle_socket_message(
                                 window.set_cursor_pos(center);
                             } else {
                                 // Make sure the mouse cursor goes back once we reenable tiling
-                                window.set_cursor_pos(workspace.layout_dimensions[idx]);
+                                window.set_cursor_pos(d.layout_dimensions[idx]);
                             }
                         }
                         SocketMessage::Retile => {
-                            workspace.get_visible_windows();
-                            workspace.get_foreground_window();
-                            workspace.calculate_layout();
-                            let idx = workspace.foreground_window.index(&workspace.windows);
-                            workspace.apply_layout(idx);
+                            d.get_visible_windows();
+                            d.get_foreground_window();
+                            d.calculate_layout();
+                            let idx = d.foreground_window.index(&d.windows);
+                            d.apply_layout(idx);
                         }
                         SocketMessage::MoveWindow(direction) => match direction {
-                            OperationDirection::Left => {
-                                workspace.window_op_left(DirectionOperation::Move)
-                            }
+                            OperationDirection::Left => d.window_op_left(DirectionOperation::Move),
                             OperationDirection::Right => {
-                                workspace.window_op_right(DirectionOperation::Move)
+                                d.window_op_right(DirectionOperation::Move)
                             }
-                            OperationDirection::Up => {
-                                workspace.window_op_up(DirectionOperation::Move)
-                            }
-                            OperationDirection::Down => {
-                                workspace.window_op_down(DirectionOperation::Move)
-                            }
+                            OperationDirection::Up => d.window_op_up(DirectionOperation::Move),
+                            OperationDirection::Down => d.window_op_down(DirectionOperation::Move),
                             OperationDirection::Previous => {
-                                workspace.window_op_previous(DirectionOperation::Move)
+                                d.window_op_previous(DirectionOperation::Move)
                             }
-                            OperationDirection::Next => {
-                                workspace.window_op_next(DirectionOperation::Move)
-                            }
+                            OperationDirection::Next => d.window_op_next(DirectionOperation::Move),
                         },
                         SocketMessage::GapSize(size) => {
-                            workspace.gaps = size;
-                            workspace.calculate_layout();
-                            workspace.apply_layout(None);
+                            d.gaps = size;
+                            d.calculate_layout();
+                            d.apply_layout(None);
                         }
                         SocketMessage::AdjustGaps(sizing) => {
                             match sizing {
                                 Sizing::Increase => {
-                                    workspace.gaps += 1;
+                                    d.gaps += 1;
                                 }
                                 Sizing::Decrease => {
-                                    if workspace.gaps > 0 {
-                                        workspace.gaps -= 1;
+                                    if d.gaps > 0 {
+                                        d.gaps -= 1;
                                     }
                                 }
                             }
 
-                            workspace.calculate_layout();
-                            workspace.apply_layout(None);
+                            d.calculate_layout();
+                            d.apply_layout(None);
                         }
                         SocketMessage::Layout(layout) => {
-                            workspace.layout = layout;
-                            workspace.calculate_layout();
-                            workspace.apply_layout(None);
+                            d.layout = layout;
+                            d.calculate_layout();
+                            d.apply_layout(None);
                         }
                         SocketMessage::CycleLayout(direction) => {
                             match direction {
-                                CycleDirection::Previous => workspace.layout.previous(),
-                                CycleDirection::Next => workspace.layout.next(),
+                                CycleDirection::Previous => d.layout.previous(),
+                                CycleDirection::Next => d.layout.next(),
                             }
 
-                            workspace.calculate_layout();
-                            workspace.apply_layout(None);
+                            d.calculate_layout();
+                            d.apply_layout(None);
                         }
                         SocketMessage::FloatClass(target) => {
                             let mut float_classes = FLOAT_CLASSES.lock().unwrap();
@@ -353,6 +365,23 @@ fn handle_socket_message(
                             let mut float_titles = FLOAT_TITLES.lock().unwrap();
                             if !float_titles.contains(&target) {
                                 float_titles.push(target)
+                            }
+                        }
+                        SocketMessage::EnsureDesktops(desired_count) => {
+                            let current_count = get_desktops().unwrap().iter().count();
+                            if current_count < desired_count {
+                                let mut required = desired_count - current_count;
+                                while required > 0 {
+                                    create_desktop().expect("could not crate desktop");
+                                    required = required - 1;
+                                }
+                            }
+                        }
+                        SocketMessage::ExeDesktop(target, desktop) => {
+                            if desktop > 0 {
+                                let mut desktop_exes = DESKTOP_EXES.lock().unwrap();
+                                let indexed = desktop - 1;
+                                desktop_exes.insert(target, indexed);
                             }
                         }
                     }

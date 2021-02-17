@@ -104,12 +104,15 @@ extern "system" fn handler(
             // [yatta\src\windows_event.rs:111] event_code = ObjectLocationChange
             // [yatta\src\windows_event.rs:110] event = 32780
             // [yatta\src\windows_event.rs:111] event_code = ObjectNameChange
-            if event_code == WinEventCode::ObjectNameChange
-                && window.is_visible()
-                && window.title().is_some()
-                && window.title().unwrap().contains("Firefox")
-            {
-                WindowsEventType::Show
+            if let Some(title) = window.title() {
+                if event_code == WinEventCode::ObjectNameChange
+                    && window.is_visible()
+                    && title.contains("Firefox")
+                {
+                    WindowsEventType::Show
+                } else {
+                    return;
+                }
             } else {
                 return;
             }
@@ -124,31 +127,12 @@ extern "system" fn handler(
             title: window.title(),
         };
 
-        // Need to expand this blacklist of windows that aren't visible but end up
-        // forcing a redraw of the workspace
-
-        // Not sure if this is needed after fixing the should_manage and is_cloaked fns
-        let blacklist = vec![
-            Some(String::from("Task Host Window")),
-            Some(String::from("nsAppShell:EventWindow")), // Firefox
-            Some(String::from("Firefox Media Keys")),     // Firefox
-            Some(String::from("XCP")),
-            Some(String::from("MCI command handling window")),
-            Some(String::from("yatta")), // AHK script name
-            Some(String::from("CSpNotify Notify Window")), // When starting Signal
-            Some(String::from("Perfdisk PNP Window")),
-            Some(String::from("Location Notification")),
-            Some(String::from("Discord Updater")), // When starting Discord
-        ];
-
-        if !blacklist.contains(&window.title()) {
-            WINDOWS_EVENT_CHANNEL
-                .lock()
-                .unwrap()
-                .0
-                .send(event)
-                .expect("Failed to forward WindowsEvent");
-        }
+        WINDOWS_EVENT_CHANNEL
+            .lock()
+            .unwrap()
+            .0
+            .send(event)
+            .expect("Failed to forward WindowsEvent");
     } else {
         debug!("ignored event from {:?} {}", window.title(), event_code);
     }
@@ -172,7 +156,8 @@ impl WindowsEventType {
             | WinEventCode::SystemMinimizeStart => Some(Self::Hide),
 
             // WinEventCode::ObjectCreate |
-            WinEventCode::ObjectShow
+            WinEventCode::SystemDesktopSwitch
+            | WinEventCode::ObjectShow
             | WinEventCode::ObjectUncloaked
             | WinEventCode::SystemMinimizeEnd => Some(Self::Show),
 

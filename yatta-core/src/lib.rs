@@ -18,6 +18,8 @@ pub enum SocketMessage {
     FloatClass(String),
     FloatExe(String),
     FloatTitle(String),
+    EnsureDesktops(usize),
+    ExeDesktop(String, usize),
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Display, EnumString)]
