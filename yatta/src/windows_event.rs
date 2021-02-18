@@ -19,7 +19,12 @@ use bindings::windows::win32::{
     windows_and_messaging::HWND,
 };
 
-use crate::{message_loop, window::Window, Message, YATTA_CHANNEL};
+use crate::{
+    message_loop,
+    window::{exe_name_from_path, Window},
+    Message,
+    YATTA_CHANNEL,
+};
 
 lazy_static! {
     static ref WINDOWS_EVENT_CHANNEL: Arc<Mutex<(Sender<WindowsEvent>, Receiver<WindowsEvent>)>> =
@@ -101,12 +106,14 @@ extern "system" fn handler(
             //
             // [yatta\src\windows_event.rs:110] event = 32780 ObjectNameChange
             // [yatta\src\windows_event.rs:110] event = 32779 ObjectLocationChange
-            if let Some(title) = window.title() {
-                if event_code == WinEventCode::ObjectNameChange
-                    && window.is_visible()
-                    && title.contains("Firefox")
-                {
-                    WindowsEventType::Show
+            let object_name_change_on_launch = vec!["firefox.exe", "idea64.exe"];
+            if let Ok(path) = window.exe_path() {
+                if event_code == WinEventCode::ObjectNameChange {
+                    if object_name_change_on_launch.contains(&&*exe_name_from_path(&path)) {
+                        WindowsEventType::Show
+                    } else {
+                        return;
+                    }
                 } else {
                     return;
                 }

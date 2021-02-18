@@ -246,10 +246,10 @@ impl Desktop {
                 let mut layouts: Vec<Rect> = vec![];
                 for _ in &self.windows {
                     layouts.push(Rect {
-                        x: self.dimensions.x + x,
-                        y: self.dimensions.y,
-                        width,
-                        height: self.dimensions.height,
+                        x:      (self.dimensions.x + x) + self.gaps,
+                        y:      (self.dimensions.y) + self.gaps,
+                        width:  width - (self.gaps * 2),
+                        height: self.dimensions.height - (self.gaps * 2),
                     });
                     x += width;
                 }
@@ -263,10 +263,10 @@ impl Desktop {
                 let mut layouts: Vec<Rect> = vec![];
                 for _ in &self.windows {
                     layouts.push(Rect {
-                        x: self.dimensions.x,
-                        y: self.dimensions.y + y,
-                        width: self.dimensions.width,
-                        height,
+                        x:      self.dimensions.x + self.gaps,
+                        y:      self.dimensions.y + y + self.gaps,
+                        width:  self.dimensions.width - (self.gaps * 2),
+                        height: height - (self.gaps * 2),
                     });
                     y += height;
                 }

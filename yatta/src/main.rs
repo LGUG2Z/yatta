@@ -12,7 +12,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use crossbeam_channel::{select, unbounded, Receiver, Sender};
-use flexi_logger::{detailed_format, Duplicate};
+use flexi_logger::{colored_detailed_format, Duplicate};
 use lazy_static::lazy_static;
 use log::{error, info};
 use sysinfo::SystemExt;
@@ -57,7 +57,7 @@ fn main() -> Result<()> {
     let home = dirs::home_dir().context("could not look up home directory")?;
 
     flexi_logger::Logger::with_str("debug")
-        .format(detailed_format)
+        .format(colored_detailed_format)
         .log_to_file()
         .o_timestamp(false)
         .o_print_message(true)
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
                 .to_str()
                 .context("could not convert home directory path to string")?,
         )
-        .duplicate_to_stderr(Duplicate::Info)
+        .duplicate_to_stdout(Duplicate::Info)
         .start()?;
 
     let mut system = sysinfo::System::new_all();
