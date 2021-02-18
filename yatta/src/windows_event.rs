@@ -10,7 +10,7 @@ use std::{
 
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use lazy_static::lazy_static;
-use log::{debug, info};
+use log::{error, info};
 use strum::Display;
 
 use bindings::windows::win32::{
@@ -19,7 +19,7 @@ use bindings::windows::win32::{
     windows_and_messaging::HWND,
 };
 
-use crate::{message_loop, window::Window, Message, MESSAGE_CHANNEL};
+use crate::{message_loop, window::Window, Message, YATTA_CHANNEL};
 
 lazy_static! {
     static ref WINDOWS_EVENT_CHANNEL: Arc<Mutex<(Sender<WindowsEvent>, Receiver<WindowsEvent>)>> =
@@ -42,7 +42,7 @@ impl Default for WindowsEventListener {
 impl WindowsEventListener {
     pub fn start(&self) {
         let hook = self.hook.clone();
-        let message_sender = MESSAGE_CHANNEL.lock().unwrap().0.clone();
+        let yatta_sender = YATTA_CHANNEL.lock().unwrap().0.clone();
 
         thread::spawn(move || unsafe {
             let hook_ref = SetWinEventHook(
@@ -57,12 +57,15 @@ impl WindowsEventListener {
 
             hook.store(hook_ref, Ordering::SeqCst);
 
-            info!("starting message loop");
+            info!("starting windows event listener");
             message_loop::start(|_| {
                 if let Ok(event) = WINDOWS_EVENT_CHANNEL.lock().unwrap().1.try_recv() {
-                    message_sender
-                        .send(Message::WindowsEvent(event))
-                        .expect("Failed to send WinEvent");
+                    match yatta_sender.send(Message::WindowsEvent(event)) {
+                        Ok(_) => {}
+                        Err(error) => {
+                            error!("could not send windows event to yatta channel: {}", error)
+                        }
+                    }
                 }
 
                 thread::sleep(Duration::from_millis(10));
@@ -96,14 +99,8 @@ extern "system" fn handler(
             // This spams the message queue, but I don't know what else to do. On launch
             // it only sends the following WinEvents :/
             //
-            // [yatta\src\windows_event.rs:110] event = 32780
-            // [yatta\src\windows_event.rs:111] event_code = ObjectNameChange
-            // [yatta\src\windows_event.rs:110] event = 32779
-            // [yatta\src\windows_event.rs:111] event_code = ObjectLocationChange
-            // [yatta\src\windows_event.rs:110] event = 32779
-            // [yatta\src\windows_event.rs:111] event_code = ObjectLocationChange
-            // [yatta\src\windows_event.rs:110] event = 32780
-            // [yatta\src\windows_event.rs:111] event_code = ObjectNameChange
+            // [yatta\src\windows_event.rs:110] event = 32780 ObjectNameChange
+            // [yatta\src\windows_event.rs:110] event = 32779 ObjectLocationChange
             if let Some(title) = window.title() {
                 if event_code == WinEventCode::ObjectNameChange
                     && window.is_visible()
@@ -133,12 +130,10 @@ extern "system" fn handler(
             .0
             .send(event)
             .expect("Failed to forward WindowsEvent");
-    } else {
-        debug!("ignored event from {:?} {}", window.title(), event_code);
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Display, PartialEq)]
 pub enum WindowsEventType {
     Destroy,
     FocusChange,
@@ -183,7 +178,7 @@ pub enum WinEventCode {
     ObjectCloaked                         = 0x8017,
     ObjectContentScrolled                 = 0x8015,
     ObjectCreate                          = 0x8000,
-    ObjectDefactionChange                 = 0x8011,
+    ObjectDefActionChange                 = 0x8011,
     ObjectDescriptionChange               = 0x800D,
     ObjectDestroy                         = 0x8001,
     ObjectDragStart                       = 0x8021,

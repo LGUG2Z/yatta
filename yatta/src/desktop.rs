@@ -82,8 +82,9 @@ impl Desktop {
     }
 
     pub fn follow_focus_with_mouse(&mut self, idx: usize) {
-        let window = self.windows.get(idx).unwrap();
-        window.set_cursor_pos(self.layout_dimensions[idx]);
+        if let Some(window) = self.windows.get(idx) {
+            window.set_cursor_pos(self.layout_dimensions[idx]);
+        };
     }
 
     pub fn window_op_up(&mut self, op: DirectionOperation) {

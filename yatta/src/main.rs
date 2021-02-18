@@ -1,3 +1,4 @@
+extern crate flexi_logger;
 #[macro_use] extern crate num_derive;
 extern crate num_traits;
 
@@ -9,10 +10,11 @@ use std::{
     thread,
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use crossbeam_channel::{select, unbounded, Receiver, Sender};
+use flexi_logger::{detailed_format, Duplicate};
 use lazy_static::lazy_static;
-use log::{debug, error, info};
+use log::{error, info};
 use sysinfo::SystemExt;
 use uds_windows::UnixListener;
 use winvd::{
@@ -37,7 +39,7 @@ mod window;
 mod windows_event;
 
 lazy_static! {
-    static ref MESSAGE_CHANNEL: Arc<Mutex<(Sender<Message>, Receiver<Message>)>> =
+    static ref YATTA_CHANNEL: Arc<Mutex<(Sender<Message>, Receiver<Message>)>> =
         Arc::new(Mutex::new(unbounded()));
     static ref FLOAT_CLASSES: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
     static ref FLOAT_EXES: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
@@ -52,8 +54,20 @@ pub enum Message {
 }
 
 fn main() -> Result<()> {
-    std::env::set_var("RUST_LOG", "INFO");
-    env_logger::init();
+    let home = dirs::home_dir().context("could not look up home directory")?;
+
+    flexi_logger::Logger::with_str("debug")
+        .format(detailed_format)
+        .log_to_file()
+        .o_timestamp(false)
+        .o_print_message(true)
+        .directory(
+            home.as_path()
+                .to_str()
+                .context("could not convert home directory path to string")?,
+        )
+        .duplicate_to_stderr(Duplicate::Info)
+        .start()?;
 
     let mut system = sysinfo::System::new_all();
     system.refresh_processes();
@@ -64,12 +78,12 @@ fn main() -> Result<()> {
     }
 
     let desktop: Arc<Mutex<Desktop>> = Arc::new(Mutex::new(Desktop::default()));
-    info!("loaded desktop: {:?}", &desktop.lock().unwrap());
+    info!("started yatta");
 
     let listener = Arc::new(Mutex::new(WindowsEventListener::default()));
     listener.lock().unwrap().start();
 
-    let mut socket = dirs::home_dir().unwrap();
+    let mut socket = home.clone();
     socket.push("yatta.sock");
     let socket = socket.as_path();
 
@@ -85,14 +99,18 @@ fn main() -> Result<()> {
     }
 
     let stream = match UnixListener::bind(&socket) {
-        Err(err) => {
-            dbg!(err);
-            panic!("failed to bind socket")
+        Err(error) => {
+            panic!("failed to bind socket: {}", error)
         }
         Ok(stream) => stream,
     };
 
-    info!("starting listening on socket: {}", socket.to_str().unwrap());
+    info!(
+        "listening for yattac messages on socket: {}",
+        socket
+            .to_str()
+            .context("could not convert socket path to string")?
+    );
 
     let desktop_clone = desktop.clone();
     thread::spawn(move || {
@@ -110,18 +128,17 @@ fn main() -> Result<()> {
         }
     });
 
-    let message_receiver = MESSAGE_CHANNEL.lock().unwrap().1.clone();
+    let yatta_receiver = YATTA_CHANNEL.lock().unwrap().1.clone();
 
     loop {
         select! {
-                recv(message_receiver) -> maybe_msg => {
+                recv(yatta_receiver) -> maybe_msg => {
                     let msg = maybe_msg.unwrap();
                     let _ = match msg {
                         Message::WindowsEvent(ev) => {
                             let ws = Arc::clone(&desktop) ;
                             handle_windows_event_message(ev, ws)
                         },
-
                 };
             }
         }
@@ -134,19 +151,24 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
         return;
     }
 
+    // Make sure we discard any windows that no longer exist
+    desktop.windows.retain(|x| x.is_window());
+
     // Make sure that Desktop rules are enforced whenever there is a new message
     // received
     for w in &desktop.windows {
         if let Ok(path) = w.exe_path() {
             let exe = exe_name_from_path(&path);
             if let Some(desktop) = DESKTOP_EXES.lock().unwrap().get(&exe) {
-                if get_desktop_number_by_window(w.hwnd.0 as u32).unwrap() != *desktop {
-                    match move_window_to_desktop_number(w.hwnd.0 as u32, *desktop) {
-                        Ok(_) => {
-                            info!("moved {} to desktop {}", exe, desktop + 1);
-                        }
-                        Err(error) => {
-                            error!("{:?}", error);
+                if let Ok(number) = get_desktop_number_by_window(w.hwnd.0 as u32) {
+                    if number != *desktop {
+                        match move_window_to_desktop_number(w.hwnd.0 as u32, *desktop) {
+                            Ok(_) => {
+                                info!("moved {} to desktop {}", exe, desktop + 1);
+                            }
+                            Err(error) => {
+                                error!("{:?}", error);
+                            }
                         }
                     }
                 }
@@ -154,7 +176,11 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
         }
     }
 
-    info!("handling windows event: {:?}", &ev);
+    info!(
+        "handling yatta channel message: {} ({})",
+        ev.event_type, ev.event_code
+    );
+
     match ev.event_type {
         WindowsEventType::Show => {
             if desktop.windows.is_empty() {
@@ -177,11 +203,17 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
                     desktop.windows.insert(idx + 1, ev.window);
                     desktop.calculate_layout();
                     desktop.apply_layout(None);
-                } else {
-                    debug!(
-                        "did not retile on show event as window is already shown: {:?}",
-                        &ev
-                    );
+
+                    if let Some(title) = ev.window.title() {
+                        if let Ok(path) = ev.window.exe_path() {
+                            info!(
+                                "managing new window: {} - {} ({})",
+                                &exe_name_from_path(&path),
+                                &title,
+                                ev.window.hwnd.0
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -193,6 +225,9 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
             desktop.windows.retain(|x| !ev.window.eq(x));
             desktop.calculate_layout();
             desktop.apply_layout(Option::from(previous));
+            if let Some(title) = ev.window.title() {
+                info!("unmanaging window: {} ({})", &title, ev.window.hwnd.0);
+            }
         }
         WindowsEventType::FocusChange => {
             let mut current = desktop.windows.clone();
@@ -203,6 +238,16 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
             desktop.apply_layout(None);
 
             desktop.foreground_window = ev.window;
+            if let Some(title) = ev.window.title() {
+                if let Ok(path) = ev.window.exe_path() {
+                    info!(
+                        "focusing window: {} - {} ({})",
+                        &exe_name_from_path(&path),
+                        &title,
+                        ev.window.hwnd.0
+                    );
+                }
+            }
         }
     }
 }
@@ -216,8 +261,9 @@ impl DirectionOperation {
     pub fn handle(self, desktop: &mut Desktop, idx: usize, new_idx: usize) {
         match self {
             DirectionOperation::Focus => {
-                desktop.windows.get(new_idx).unwrap().set_foreground();
-                desktop.calculate_layout();
+                if let Some(window) = desktop.windows.get(new_idx) {
+                    window.set_foreground();
+                }
             }
             DirectionOperation::Move => {
                 desktop.windows.swap(idx, new_idx);
@@ -245,7 +291,7 @@ fn handle_socket_message(
                         return;
                     }
 
-                    info!("handling socket message: {:?}", &msg);
+                    info!("handling yattac socket message: {:?}", &msg);
                     match msg {
                         SocketMessage::FocusWindow(direction) => match direction {
                             OperationDirection::Left => d.window_op_left(DirectionOperation::Focus),
@@ -368,12 +414,14 @@ fn handle_socket_message(
                             }
                         }
                         SocketMessage::EnsureDesktops(desired_count) => {
-                            let current_count = get_desktops().unwrap().iter().count();
-                            if current_count < desired_count {
-                                let mut required = desired_count - current_count;
-                                while required > 0 {
-                                    create_desktop().expect("could not crate desktop");
-                                    required = required - 1;
+                            if let Ok(desktops) = get_desktops() {
+                                let current_count = desktops.iter().count();
+                                if current_count < desired_count {
+                                    let mut required = desired_count - current_count;
+                                    while required > 0 {
+                                        create_desktop().expect("could not crate desktop");
+                                        required = required - 1;
+                                    }
                                 }
                             }
                         }

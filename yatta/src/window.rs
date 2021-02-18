@@ -17,6 +17,7 @@ use bindings::windows::win32::{
         GetWindowTextW,
         GetWindowThreadProcessId,
         IsIconic,
+        IsWindow,
         IsWindowVisible,
         RealGetWindowClassW,
         SetForegroundWindow,
@@ -126,6 +127,7 @@ impl Window {
         let classes = FLOAT_CLASSES.lock().unwrap();
         let exes = FLOAT_EXES.lock().unwrap();
         let titles = FLOAT_TITLES.lock().unwrap();
+
         let mut should = true;
 
         if !self.tile {
@@ -216,6 +218,10 @@ impl Window {
         unsafe { IsIconic(self.hwnd).into() }
     }
 
+    pub fn is_window(self) -> bool {
+        unsafe { IsWindow(self.hwnd).into() }
+    }
+
     pub fn is_active(self) -> bool {
         self.info().window_status == 1
     }
@@ -261,23 +267,34 @@ impl Window {
                         // on FocusChange events if I don't filter out this one 
                         && !ex_style.contains(GwlExStyle::LAYERED)
                     {
-                        debug!(
-                            "should manage {:?} \n{:?} \n{:?}",
-                            self.title(),
-                            style,
-                            ex_style
-                        );
+                        if let Some(title) = self.title() {
+                            if let Ok(path) = self.exe_path() {
+                                debug!(
+                                    "managing {} - {} (styles: {:?}) (extended styles: {:?})",
+                                    exe_name_from_path(&path),
+                                    title,
+                                    style,
+                                    ex_style
+                                );
+                            }
+                        }
+
                         true
                     } else {
-                        if event.is_some() {
-                            debug!(
-                                "should not manage {:?} {:?} \n{:?} \n{:?}\n{}",
-                                self.title(),
-                                event,
-                                style,
-                                ex_style,
-                                is_cloaked
-                            );
+                        if let Some(event) = event {
+                            if let Some(title) = self.title() {
+                                if let Ok(path) = self.exe_path() {
+                                    debug!(
+                                        "ignoring {} - {} (event: {}) (cloaked: {}) (styles: {:?}) (extended styles: {:?})",
+                                        exe_name_from_path(&path),
+                                        title,
+                                        event,
+                                        self.is_cloaked(),
+                                        style,
+                                        ex_style
+                                    );
+                                }
+                            }
                         }
                         false
                     }
@@ -286,13 +303,6 @@ impl Window {
             }
         } else {
             false
-        }
-    }
-
-    pub fn is_regular(self) -> bool {
-        unsafe {
-            let extended_styles = GetWindowLongW(self.hwnd, GWL_EXSTYLE);
-            extended_styles == WS_EX_WINDOWEDGE || extended_styles == WS_EX_CLIENTEDGE
         }
     }
 

@@ -69,19 +69,25 @@ Run, yattac.exe float-title Calculator, Hide
 
 ; Change the focused window, Alt + Vim direction keys
 !h::
-Run, yattac.exe focus left, Hide
+; This sends an Alt key which is a hack to steal focus when Windows doesn't feel like respecting SetForegroundWindow
+; https://stackoverflow.com/questions/10740346/setforegroundwindow-only-working-while-visual-studio-is-open
+Send !
+Run, yattac.exe focus left, , Hide
 return
 
 !j::
-Run, yattac.exe focus down, Hide
+Send !
+Run, yattac.exe focus down, , Hide
 return
 
 !k::
-Run, yattac.exe focus up, Hide
+Send !
+Run, yattac.exe focus up, , Hide
 return
 
 !l::
-Run, yattac.exe focus right, Hide
+Send !
+Run, yattac.exe focus right, , Hide
 return
 
 ; Move the focused window in a given direction, Alt + Shift + Vim direction keys
