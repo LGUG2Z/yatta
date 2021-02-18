@@ -5,7 +5,7 @@ use bindings::windows::{
         display_devices::POINT,
         gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO},
         menus_and_resources::GetCursorPos,
-        system_services::{HWND_TOP, MONITOR_DEFAULTTONEAREST, SWP_NOMOVE, SWP_NOSIZE},
+        system_services::{HWND_NOTOPMOST, MONITOR_DEFAULTTONEAREST, SWP_NOMOVE, SWP_NOSIZE},
         windows_and_messaging::{EnumWindows, HWND, LPARAM},
     },
     BOOL,
@@ -278,8 +278,11 @@ impl Desktop {
     pub fn apply_layout(&mut self, new_focus: Option<usize>) {
         if let Layout::Monocle = self.layout {
             self.get_foreground_window();
-            self.foreground_window
-                .set_pos(self.layout_dimensions[0], Option::from(HWND_TOP), None);
+            self.foreground_window.set_pos(
+                self.layout_dimensions[0],
+                Option::from(HWND_NOTOPMOST),
+                None,
+            );
 
             return;
         }
@@ -292,7 +295,7 @@ impl Desktop {
                     if i == new_idx {
                         w.set_pos(
                             self.layout_dimensions[new_idx],
-                            Option::from(HWND_TOP),
+                            None,
                             Option::from(SWP_NOMOVE as u32 | SWP_NOSIZE as u32),
                         );
                     } else {
