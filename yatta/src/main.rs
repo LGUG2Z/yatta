@@ -23,7 +23,7 @@ use winvd::{
     helpers::{get_desktop_number_by_window, move_window_to_desktop_number},
 };
 
-use yatta_core::{CycleDirection, OperationDirection, Sizing, SocketMessage};
+use yatta_core::{CycleDirection, Layout, OperationDirection, Sizing, SocketMessage};
 
 use crate::{
     desktop::Desktop,
@@ -46,6 +46,7 @@ lazy_static! {
     static ref FLOAT_TITLES: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
     static ref DESKTOP_EXES: Arc<Mutex<HashMap<String, usize>>> =
         Arc::new(Mutex::new(HashMap::new()));
+    static ref LAST_LAYOUT: Arc<Mutex<Layout>> = Arc::new(Mutex::new(Layout::BSPV));
 }
 
 #[derive(Clone, Debug)]
@@ -317,6 +318,43 @@ fn handle_socket_message(
                         SocketMessage::TogglePause => {
                             d.paused = !d.paused;
                         }
+                        SocketMessage::ToggleMonocle => match d.layout {
+                            Layout::Monocle => {
+                                let idx = d.get_foreground_window_index();
+                                if let Some(window) = d.windows.get(idx) {
+                                    let window = window.clone();
+                                    let last_desktop = LAST_LAYOUT.lock().unwrap();
+                                    d.layout = *last_desktop;
+                                    d.calculate_layout();
+                                    d.apply_layout(None);
+
+                                    // If we have monocle'd a floating window, we want to restore it
+                                    // to the default floating position when toggling off monocle
+                                    if !window.tile {
+                                        let w2 = d.dimensions.width / 2;
+                                        let h2 = d.dimensions.height / 2;
+                                        let center = Rect {
+                                            x:      d.dimensions.x
+                                                + ((d.dimensions.width - w2) / 2),
+                                            y:      d.dimensions.y
+                                                + ((d.dimensions.height - h2) / 2),
+                                            width:  w2,
+                                            height: h2,
+                                        };
+                                        window.set_pos(center, None, None);
+                                        window.set_cursor_pos(center);
+                                    }
+                                }
+                            }
+                            _ => {
+                                let mut last_desktop = LAST_LAYOUT.lock().unwrap();
+                                *last_desktop = d.layout;
+
+                                d.layout = Layout::Monocle;
+                                d.calculate_layout();
+                                d.apply_layout(None);
+                            }
+                        },
                         SocketMessage::ToggleFloat => {
                             let idx = d.get_foreground_window_index();
                             let mut window = d.windows.remove(idx);

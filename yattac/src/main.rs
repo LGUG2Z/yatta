@@ -24,6 +24,7 @@ enum SubCommand {
     CycleLayout(CycleDirection),
     ToggleFloat,
     TogglePause,
+    ToggleMonocle,
     Start,
     Stop,
     FloatClass(FloatTarget),
@@ -103,6 +104,10 @@ fn main() {
         }
         SubCommand::ToggleFloat => {
             let bytes = SocketMessage::ToggleFloat.as_bytes().unwrap();
+            send_message(&*bytes);
+        }
+        SubCommand::ToggleMonocle => {
+            let bytes = SocketMessage::ToggleMonocle.as_bytes().unwrap();
             send_message(&*bytes);
         }
         SubCommand::Layout(layout) => {

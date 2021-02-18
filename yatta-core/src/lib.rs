@@ -15,6 +15,7 @@ pub enum SocketMessage {
     GapSize(i32),
     ToggleFloat,
     TogglePause,
+    ToggleMonocle,
     FloatClass(String),
     FloatExe(String),
     FloatTitle(String),
