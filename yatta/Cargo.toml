@@ -21,4 +21,3 @@ num-traits = "0.2"
 strum = { version = "0.20", features = ["derive"] }
 sysinfo = "0.16.3"
 uds_windows = "1.0"
-winvd = "0.0.20"

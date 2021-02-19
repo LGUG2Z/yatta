@@ -17,11 +17,6 @@ use lazy_static::lazy_static;
 use log::{error, info};
 use sysinfo::SystemExt;
 use uds_windows::UnixListener;
-use winvd::{
-    create_desktop,
-    get_desktops,
-    helpers::{get_desktop_number_by_window, move_window_to_desktop_number},
-};
 
 use yatta_core::{CycleDirection, Layout, OperationDirection, Sizing, SocketMessage};
 
@@ -154,28 +149,6 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
 
     // Make sure we discard any windows that no longer exist
     desktop.windows.retain(|x| x.is_window());
-
-    // Make sure that Desktop rules are enforced whenever there is a new message
-    // received
-    for w in &desktop.windows {
-        if let Ok(path) = w.exe_path() {
-            let exe = exe_name_from_path(&path);
-            if let Some(desktop) = DESKTOP_EXES.lock().unwrap().get(&exe) {
-                if let Ok(number) = get_desktop_number_by_window(w.hwnd.0 as u32) {
-                    if number != *desktop {
-                        match move_window_to_desktop_number(w.hwnd.0 as u32, *desktop) {
-                            Ok(_) => {
-                                info!("moved {} to desktop {}", exe, desktop + 1);
-                            }
-                            Err(error) => {
-                                error!("{:?}", error);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     info!(
         "handling yatta channel message: {} ({})",
@@ -449,25 +422,6 @@ fn handle_socket_message(
                             let mut float_titles = FLOAT_TITLES.lock().unwrap();
                             if !float_titles.contains(&target) {
                                 float_titles.push(target)
-                            }
-                        }
-                        SocketMessage::EnsureDesktops(desired_count) => {
-                            if let Ok(desktops) = get_desktops() {
-                                let current_count = desktops.iter().count();
-                                if current_count < desired_count {
-                                    let mut required = desired_count - current_count;
-                                    while required > 0 {
-                                        create_desktop().expect("could not crate desktop");
-                                        required = required - 1;
-                                    }
-                                }
-                            }
-                        }
-                        SocketMessage::ExeDesktop(target, desktop) => {
-                            if desktop > 0 {
-                                let mut desktop_exes = DESKTOP_EXES.lock().unwrap();
-                                let indexed = desktop - 1;
-                                desktop_exes.insert(target, indexed);
                             }
                         }
                     }
