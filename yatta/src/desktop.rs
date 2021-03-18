@@ -2,27 +2,49 @@ use std::mem;
 
 use bindings::windows::{
     win32::{
-        display_devices::POINT,
-        gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO},
+        display_devices::{POINT, RECT},
+        gdi::{
+            EnumDisplayMonitors,
+            GetMonitorInfoW,
+            MonitorFromPoint,
+            MonitorFromWindow,
+            HDC,
+            MONITORINFO,
+        },
         menus_and_resources::GetCursorPos,
-        system_services::{HWND_NOTOPMOST, MONITOR_DEFAULTTONEAREST, SWP_NOMOVE, SWP_NOSIZE},
+        system_services::{
+            HWND_NOTOPMOST,
+            MONITOR_DEFAULTTONEAREST,
+            MONITOR_DEFAULTTOPRIMARY,
+            SWP_NOMOVE,
+            SWP_NOSIZE,
+        },
         windows_and_messaging::{EnumWindows, HWND, LPARAM},
     },
     BOOL,
 };
+
 use yatta_core::Layout;
 
 use crate::{rect::Rect, window::Window, DirectionOperation};
+use std::cmp::Ordering;
 
 #[derive(Debug, Clone)]
 pub struct Desktop {
     pub dimensions:        Rect,
     pub windows:           Vec<Window>,
+    pub displays:          Vec<Display>,
     pub layout_dimensions: Vec<Rect>,
     pub layout:            Layout,
     pub foreground_window: Window,
     pub gaps:              i32,
     pub paused:            bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct Display {
+    hmonitor:   isize,
+    dimensions: Rect,
 }
 
 pub const PADDING: i32 = 20;
@@ -51,6 +73,19 @@ impl Desktop {
         rect.x += PADDING;
 
         self.dimensions = rect;
+    }
+
+    pub fn enumerate_display_monitors(&mut self) {
+        self.displays.clear();
+
+        unsafe {
+            EnumDisplayMonitors(
+                HDC(0),
+                std::ptr::null_mut(),
+                Some(enum_display_monitor),
+                LPARAM(&mut self.displays as *mut Vec<Display> as isize),
+            );
+        }
     }
 
     pub fn get_visible_windows(&mut self) {
@@ -316,12 +351,25 @@ impl Default for Desktop {
         let mut desktop = Desktop {
             dimensions:        Rect::zero(),
             windows:           vec![],
+            displays:          vec![],
             layout_dimensions: vec![],
             layout:            Layout::BSPV,
             foreground_window: Window::default(),
             gaps:              5,
             paused:            false,
         };
+
+        desktop.enumerate_display_monitors();
+
+        desktop.displays.sort_by(|x, y| {
+            let ordering = y.dimensions.x.cmp(&x.dimensions.x);
+
+            if ordering == Ordering::Equal {
+                return y.dimensions.y.cmp(&x.dimensions.y);
+            }
+
+            ordering
+        });
 
         desktop.get_dimensions();
         desktop.get_visible_windows();
@@ -336,11 +384,47 @@ impl Default for Desktop {
 extern "system" fn enum_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
     let windows = unsafe { &mut *(lparam.0 as *mut Vec<Window>) };
 
-    let w = Window { hwnd, tile: true };
+    let hmonitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY as u32) };
+
+    let w = Window {
+        hwnd,
+        hmonitor,
+        tile: true,
+    };
 
     if w.is_visible() && !w.is_minimized() && w.should_manage(None) {
         windows.push(w)
     }
+
+    true.into()
+}
+
+extern "system" fn enum_display_monitor(
+    monitor: isize,
+    _: HDC,
+    _: *mut RECT,
+    lparam: LPARAM,
+) -> BOOL {
+    let displays = unsafe { &mut *(lparam.0 as *mut Vec<Display>) };
+
+    let mut rect: Rect = unsafe {
+        let mut info: MONITORINFO = mem::zeroed();
+        info.cb_size = mem::size_of::<MONITORINFO>() as u32;
+
+        GetMonitorInfoW(monitor, &mut info as *mut MONITORINFO as *mut _);
+
+        info.rc_work.into()
+    };
+
+    rect.height -= PADDING * 2;
+    rect.width -= PADDING * 2;
+    rect.y += PADDING;
+    rect.x += PADDING;
+
+    displays.push(Display {
+        hmonitor:   monitor,
+        dimensions: rect,
+    });
 
     true.into()
 }

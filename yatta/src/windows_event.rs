@@ -14,7 +14,8 @@ use log::{error, info};
 use strum::Display;
 
 use bindings::windows::win32::{
-    system_services::{EVENT_MAX, EVENT_MIN, OBJID_WINDOW},
+    gdi::MonitorFromWindow,
+    system_services::{EVENT_MAX, EVENT_MIN, MONITOR_DEFAULTTOPRIMARY, OBJID_WINDOW},
     windows_accessibility::SetWinEventHook,
     windows_and_messaging::HWND,
 };
@@ -94,7 +95,13 @@ extern "system" fn handler(
         return;
     }
 
-    let window = Window { hwnd, tile: true };
+    let hmonitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY as u32) };
+
+    let window = Window {
+        hwnd,
+        hmonitor,
+        tile: true,
+    };
 
     let event_code = unsafe { ::std::mem::transmute(event) };
     let event_type = match WindowsEventType::from_event_code(event_code) {

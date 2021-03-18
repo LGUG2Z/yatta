@@ -6,6 +6,7 @@ use log::debug;
 
 use bindings::windows::win32::{
     dwm::{DwmGetWindowAttribute, DWMWINDOWATTRIBUTE},
+    gdi::MonitorFromWindow,
     keyboard_and_mouse_input::SetFocus,
     menus_and_resources::SetCursorPos,
     system_services::*,
@@ -99,8 +100,9 @@ bitflags! {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Window {
-    pub hwnd: HWND,
-    pub tile: bool,
+    pub hwnd:     HWND,
+    pub hmonitor: isize,
+    pub tile:     bool,
 }
 
 unsafe impl Send for Window {}
@@ -120,7 +122,13 @@ pub fn exe_name_from_path(path: &str) -> String {
 impl Window {
     pub fn foreground() -> Window {
         let hwnd = unsafe { GetForegroundWindow() };
-        Window { hwnd, tile: true }
+        let hmonitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY as u32) };
+
+        Window {
+            hwnd,
+            hmonitor,
+            tile: true,
+        }
     }
 
     pub fn should_tile(&self) -> bool {
@@ -416,8 +424,9 @@ impl Window {
 impl Default for Window {
     fn default() -> Self {
         Window {
-            hwnd: HWND(0),
-            tile: true,
+            hwnd:     HWND(0),
+            hmonitor: 0,
+            tile:     true,
         }
     }
 }
