@@ -377,6 +377,20 @@ fn handle_socket_message(
                             }
                             OperationDirection::Next => d.window_op_next(DirectionOperation::Move),
                         },
+                        SocketMessage::MoveWindowToDisplay(direction) => {
+                            let idx = d.get_foreground_window_index();
+                            desktop.move_window_to_display(idx, display_idx, direction);
+                        }
+                        SocketMessage::MoveWindowToDisplayNumber(target) => {
+                            let idx = d.get_foreground_window_index();
+                            desktop.move_window_to_display_number(idx, display_idx, target);
+                        }
+                        SocketMessage::FocusDisplay(direction) => {
+                            desktop.focus_display(display_idx, direction);
+                        }
+                        SocketMessage::FocusDisplayNumber(target) => {
+                            desktop.focus_display_number(target);
+                        }
                         SocketMessage::GapSize(size) => {
                             d.gaps = size;
                             d.calculate_layout();

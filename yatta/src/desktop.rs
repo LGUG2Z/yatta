@@ -11,7 +11,7 @@ use bindings::windows::{
             HDC,
             MONITORINFO,
         },
-        menus_and_resources::GetCursorPos,
+        menus_and_resources::{GetCursorPos, SetCursorPos},
         system_services::{
             HWND_NOTOPMOST,
             MONITOR_DEFAULTTONEAREST,
@@ -23,9 +23,11 @@ use bindings::windows::{
     },
     BOOL,
 };
-use yatta_core::Layout;
+use yatta_core::{CycleDirection, Layout};
 
 use crate::{rect::Rect, window::Window, DirectionOperation};
+use enigo::{Enigo, MouseButton, MouseControllable};
+use std::borrow::BorrowMut;
 
 #[derive(Debug, Clone)]
 pub struct Desktop {
@@ -60,6 +62,15 @@ impl Display {
         }
 
         idx
+    }
+
+    pub fn set_cursor_pos_to_centre(&self) {
+        unsafe {
+            SetCursorPos(
+                self.dimensions.x + (self.dimensions.width / 2),
+                self.dimensions.y + (self.dimensions.height / 2),
+            );
+        }
     }
 
     pub fn follow_focus_with_mouse(&mut self, idx: usize) {
@@ -344,6 +355,119 @@ impl Desktop {
                 .filter(|x| x.hmonitor == display.hmonitor)
                 .map(|x| x.to_owned())
                 .collect::<Vec<Window>>();
+        }
+    }
+
+    pub fn focus_display(&mut self, from: usize, direction: CycleDirection) {
+        let can_focus = self.displays.len() > 1;
+
+        if can_focus {
+            let to = match direction {
+                CycleDirection::Previous => {
+                    if from == 0 {
+                        self.displays.len() - 1
+                    } else {
+                        from - 1
+                    }
+                }
+                CycleDirection::Next => {
+                    if from == self.displays.len() - 1 {
+                        0
+                    } else {
+                        from + 1
+                    }
+                }
+            };
+
+            let target = self.displays[to].borrow_mut();
+            if let Some(window) = target.windows.first() {
+                window.set_foreground();
+                target.follow_focus_with_mouse(0)
+            } else {
+                target.set_cursor_pos_to_centre();
+                let mut enigo = Enigo::new();
+                enigo.mouse_click(MouseButton::Left)
+            }
+        }
+    }
+
+    pub fn focus_display_number(&mut self, to: usize) {
+        let can_focus = to <= self.displays.len() && to > 0;
+
+        if can_focus {
+            let to = to - 1;
+
+            let target = self.displays[to].borrow_mut();
+            if let Some(window) = target.windows.first() {
+                window.set_foreground();
+                target.follow_focus_with_mouse(0)
+            } else {
+                target.set_cursor_pos_to_centre();
+                let mut enigo = Enigo::new();
+                enigo.mouse_click(MouseButton::Left)
+            }
+        }
+    }
+
+    pub fn move_window_to_display(
+        &mut self,
+        window_idx: usize,
+        from: usize,
+        direction: CycleDirection,
+    ) {
+        let can_move = self.displays.len() > 1;
+
+        if can_move {
+            let to = match direction {
+                CycleDirection::Previous => {
+                    if from == 0 {
+                        self.displays.len() - 1
+                    } else {
+                        from - 1
+                    }
+                }
+                CycleDirection::Next => {
+                    if from == self.displays.len() - 1 {
+                        0
+                    } else {
+                        from + 1
+                    }
+                }
+            };
+
+            let window = {
+                let origin = self.displays[from].borrow_mut();
+                let window = origin.windows.remove(window_idx);
+                origin.calculate_layout();
+                origin.apply_layout(None);
+                window
+            };
+
+            let target = self.displays[to].borrow_mut();
+            target.windows.insert(0, window);
+            target.calculate_layout();
+            target.apply_layout(Option::from(0));
+        }
+    }
+
+    pub fn move_window_to_display_number(&mut self, window_idx: usize, from: usize, to: usize) {
+        let can_move = to <= self.displays.len() && to > 0;
+
+        if can_move {
+            let to = to - 1;
+
+            let window = {
+                let origin = self.displays[from].borrow_mut();
+                let window = origin.windows.remove(window_idx);
+                origin.calculate_layout();
+                origin.apply_layout(None);
+                window
+            };
+
+            let target = self.displays[to].borrow_mut();
+            target.windows.insert(0, window);
+            target.calculate_layout();
+            target.apply_layout(Option::from(0));
         }
     }
 

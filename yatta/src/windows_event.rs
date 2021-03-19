@@ -164,9 +164,7 @@ impl WindowsEventType {
             | WinEventCode::ObjectHide
             | WinEventCode::SystemMinimizeStart => Some(Self::Hide),
 
-            // WinEventCode::ObjectCreate |
-            WinEventCode::SystemDesktopSwitch
-            | WinEventCode::ObjectShow
+            WinEventCode::ObjectShow
             | WinEventCode::ObjectUncloaked
             | WinEventCode::SystemMinimizeEnd => Some(Self::Show),
 
