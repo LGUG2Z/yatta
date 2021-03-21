@@ -3,6 +3,7 @@ extern crate flexi_logger;
 extern crate num_traits;
 
 use std::{
+    borrow::BorrowMut,
     collections::HashMap,
     io::{BufRead, BufReader, ErrorKind},
     process::exit,
@@ -21,7 +22,7 @@ use uds_windows::UnixListener;
 use yatta_core::{CycleDirection, Layout, OperationDirection, Sizing, SocketMessage};
 
 use crate::{
-    desktop::Desktop,
+    desktop::{Desktop, Display},
     rect::Rect,
     window::exe_name_from_path,
     windows_event::{WindowsEvent, WindowsEventListener, WindowsEventType},
@@ -148,7 +149,12 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
     }
 
     // Make sure we discard any windows that no longer exist
-    desktop.windows.retain(|x| x.is_window());
+    for display in &mut desktop.displays {
+        display.windows.retain(|x| x.is_window());
+    }
+
+    let display_idx = desktop.get_active_display_idx();
+    let display = desktop.displays[display_idx].borrow_mut();
 
     info!(
         "handling yatta channel message: {} ({})",
@@ -157,26 +163,26 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
 
     match ev.event_type {
         WindowsEventType::Show => {
-            if desktop.windows.is_empty() {
-                desktop.windows.push(ev.window);
-                desktop.calculate_layout();
-                desktop.apply_layout(None);
+            if display.windows.is_empty() {
+                display.windows.push(ev.window);
+                display.calculate_layout();
+                display.apply_layout(None);
             } else {
                 // Some apps like Windows Terminal send multiple Events on startup, we don't
                 // want dupes
                 let mut contains = false;
 
-                for window in &desktop.windows {
+                for window in &display.windows {
                     if window.hwnd == ev.window.hwnd {
                         contains = true;
                     }
                 }
 
                 if !contains {
-                    let idx = desktop.get_foreground_window_index();
-                    desktop.windows.insert(idx + 1, ev.window);
-                    desktop.calculate_layout();
-                    desktop.apply_layout(None);
+                    let idx = display.get_foreground_window_index();
+                    display.windows.insert(idx + 1, ev.window);
+                    display.calculate_layout();
+                    display.apply_layout(None);
 
                     if let Some(title) = ev.window.title() {
                         if let Ok(path) = ev.window.exe_path() {
@@ -192,26 +198,22 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
             }
         }
         WindowsEventType::Hide | WindowsEventType::Destroy => {
-            let index = ev.window.index(&desktop.windows);
+            let index = ev.window.index(&display.windows);
             let mut previous = index.unwrap_or(0);
             previous = if previous == 0 { 0 } else { previous - 1 };
 
-            desktop.windows.retain(|x| !ev.window.eq(x));
-            desktop.calculate_layout();
-            desktop.apply_layout(Option::from(previous));
+            display.windows.retain(|x| !ev.window.eq(x));
+            display.calculate_layout();
+            display.apply_layout(Option::from(previous));
             if let Some(title) = ev.window.title() {
                 info!("unmanaging window: {} ({})", &title, ev.window.hwnd.0);
             }
         }
         WindowsEventType::FocusChange => {
-            let mut current = desktop.windows.clone();
-            desktop.get_visible_windows();
-            current.retain(|x| desktop.windows.contains(x));
-            desktop.windows = current;
-            desktop.calculate_layout();
-            desktop.apply_layout(None);
+            display.calculate_layout();
+            display.apply_layout(None);
 
-            desktop.foreground_window = ev.window;
+            display.foreground_window = ev.window;
             if let Some(title) = ev.window.title() {
                 if let Ok(path) = ev.window.exe_path() {
                     info!(
@@ -232,21 +234,21 @@ pub enum DirectionOperation {
 }
 
 impl DirectionOperation {
-    pub fn handle(self, desktop: &mut Desktop, idx: usize, new_idx: usize) {
+    pub fn handle(self, display: &mut Display, idx: usize, new_idx: usize) {
         match self {
             DirectionOperation::Focus => {
-                if let Some(window) = desktop.windows.get(new_idx) {
+                if let Some(window) = display.windows.get(new_idx) {
                     window.set_foreground();
                 }
             }
             DirectionOperation::Move => {
-                desktop.windows.swap(idx, new_idx);
-                desktop.calculate_layout();
-                desktop.apply_layout(Option::from(new_idx));
+                display.windows.swap(idx, new_idx);
+                display.calculate_layout();
+                display.apply_layout(Option::from(new_idx));
             }
         }
 
-        desktop.follow_focus_with_mouse(new_idx);
+        display.follow_focus_with_mouse(new_idx);
     }
 }
 
@@ -255,15 +257,19 @@ fn handle_socket_message(
     desktop: &Arc<Mutex<Desktop>>,
     _listener: Arc<Mutex<WindowsEventListener>>,
 ) {
-    let mut d = desktop.lock().unwrap();
+    let mut desktop = desktop.lock().unwrap();
+
     let stream = BufReader::new(stream);
     for line in stream.lines() {
         match line {
             Ok(socket_msg) => {
                 if let Ok(msg) = SocketMessage::from_str(&socket_msg) {
-                    if d.paused && !matches!(msg, SocketMessage::TogglePause) {
+                    if desktop.paused && !matches!(msg, SocketMessage::TogglePause) {
                         return;
                     }
+
+                    let display_idx = desktop.get_active_display_idx();
+                    let d = desktop.displays[display_idx].borrow_mut();
 
                     info!("handling yattac socket message: {:?}", &msg);
                     match msg {
@@ -289,7 +295,7 @@ fn handle_socket_message(
                             window.set_cursor_pos(d.layout_dimensions[0]);
                         }
                         SocketMessage::TogglePause => {
-                            d.paused = !d.paused;
+                            desktop.paused = !desktop.paused;
                         }
                         SocketMessage::ToggleMonocle => match d.layout {
                             Layout::Monocle => {
@@ -354,7 +360,6 @@ fn handle_socket_message(
                             }
                         }
                         SocketMessage::Retile => {
-                            d.get_visible_windows();
                             d.get_foreground_window();
                             d.calculate_layout();
                             let idx = d.foreground_window.index(&d.windows);
@@ -372,6 +377,20 @@ fn handle_socket_message(
                             }
                             OperationDirection::Next => d.window_op_next(DirectionOperation::Move),
                         },
+                        SocketMessage::MoveWindowToDisplay(direction) => {
+                            let idx = d.get_foreground_window_index();
+                            desktop.move_window_to_display(idx, display_idx, direction);
+                        }
+                        SocketMessage::MoveWindowToDisplayNumber(target) => {
+                            let idx = d.get_foreground_window_index();
+                            desktop.move_window_to_display_number(idx, display_idx, target);
+                        }
+                        SocketMessage::FocusDisplay(direction) => {
+                            desktop.focus_display(display_idx, direction);
+                        }
+                        SocketMessage::FocusDisplayNumber(target) => {
+                            desktop.focus_display_number(target);
+                        }
                         SocketMessage::GapSize(size) => {
                             d.gaps = size;
                             d.calculate_layout();

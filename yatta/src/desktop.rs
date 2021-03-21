@@ -1,69 +1,52 @@
-use std::mem;
+use std::{cmp::Ordering, mem};
 
 use bindings::windows::{
     win32::{
-        display_devices::POINT,
-        gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO},
-        menus_and_resources::GetCursorPos,
-        system_services::{HWND_NOTOPMOST, MONITOR_DEFAULTTONEAREST, SWP_NOMOVE, SWP_NOSIZE},
+        display_devices::{POINT, RECT},
+        gdi::{
+            EnumDisplayMonitors,
+            GetMonitorInfoW,
+            MonitorFromPoint,
+            MonitorFromWindow,
+            HDC,
+            MONITORINFO,
+        },
+        menus_and_resources::{GetCursorPos, SetCursorPos},
+        system_services::{
+            HWND_NOTOPMOST,
+            MONITOR_DEFAULTTONEAREST,
+            MONITOR_DEFAULTTOPRIMARY,
+            SWP_NOMOVE,
+            SWP_NOSIZE,
+        },
         windows_and_messaging::{EnumWindows, HWND, LPARAM},
     },
     BOOL,
 };
-use yatta_core::Layout;
+use yatta_core::{CycleDirection, Layout};
 
 use crate::{rect::Rect, window::Window, DirectionOperation};
+use enigo::{Enigo, MouseButton, MouseControllable};
+use std::borrow::BorrowMut;
 
 #[derive(Debug, Clone)]
 pub struct Desktop {
-    pub dimensions:        Rect,
-    pub windows:           Vec<Window>,
-    pub layout_dimensions: Vec<Rect>,
-    pub layout:            Layout,
-    pub foreground_window: Window,
-    pub gaps:              i32,
-    pub paused:            bool,
+    pub displays: Vec<Display>,
+    pub paused:   bool,
 }
 
-pub const PADDING: i32 = 20;
+#[derive(Debug, Clone)]
+pub struct Display {
+    pub windows:           Vec<Window>,
+    pub hmonitor:          isize,
+    pub dimensions:        Rect,
+    pub layout:            Layout,
+    pub layout_dimensions: Vec<Rect>,
+    pub foreground_window: Window,
+    pub gaps:              i32,
+}
 
-impl Desktop {
-    pub fn get_dimensions(&mut self) {
-        let active_monitor = unsafe {
-            let mut cursor_pos: POINT = mem::zeroed();
-            GetCursorPos(&mut cursor_pos);
-
-            MonitorFromPoint(cursor_pos, MONITOR_DEFAULTTONEAREST as u32)
-        };
-
-        let mut rect: Rect = unsafe {
-            let mut info: MONITORINFO = mem::zeroed();
-            info.cb_size = mem::size_of::<MONITORINFO>() as u32;
-
-            GetMonitorInfoW(active_monitor, &mut info as *mut MONITORINFO as *mut _);
-
-            info.rc_work.into()
-        };
-
-        rect.height -= PADDING * 2;
-        rect.width -= PADDING * 2;
-        rect.y += PADDING;
-        rect.x += PADDING;
-
-        self.dimensions = rect;
-    }
-
-    pub fn get_visible_windows(&mut self) {
-        self.windows.clear();
-
-        unsafe {
-            EnumWindows(
-                Some(enum_window),
-                LPARAM(&mut self.windows as *mut Vec<Window> as isize),
-            );
-        }
-    }
-
+impl Display {
     pub fn get_foreground_window(&mut self) {
         self.foreground_window = Window::foreground();
     }
@@ -79,6 +62,15 @@ impl Desktop {
         }
 
         idx
+    }
+
+    pub fn set_cursor_pos_to_centre(&self) {
+        unsafe {
+            SetCursorPos(
+                self.dimensions.x + (self.dimensions.width / 2),
+                self.dimensions.y + (self.dimensions.height / 2),
+            );
+        }
     }
 
     pub fn follow_focus_with_mouse(&mut self, idx: usize) {
@@ -311,23 +303,213 @@ impl Desktop {
     }
 }
 
+pub const PADDING: i32 = 20;
+
+impl Desktop {
+    pub fn get_active_display_idx(&self) -> usize {
+        let active_display = unsafe {
+            let mut cursor_pos: POINT = mem::zeroed();
+            GetCursorPos(&mut cursor_pos);
+
+            MonitorFromPoint(cursor_pos, MONITOR_DEFAULTTONEAREST as u32)
+        };
+
+        for (i, display) in self.displays.iter().enumerate() {
+            if display.hmonitor == active_display {
+                return i;
+            }
+        }
+
+        0
+    }
+
+    pub fn enumerate_display_monitors(&mut self) {
+        self.displays.clear();
+
+        unsafe {
+            EnumDisplayMonitors(
+                HDC(0),
+                std::ptr::null_mut(),
+                Some(enum_display_monitor),
+                LPARAM(&mut self.displays as *mut Vec<Display> as isize),
+            );
+        }
+    }
+
+    pub fn get_visible_windows(&mut self) {
+        let mut windows: Vec<Window> = vec![];
+
+        unsafe {
+            EnumWindows(
+                Some(enum_window),
+                LPARAM(&mut windows as *mut Vec<Window> as isize),
+            );
+        }
+
+        for display in &mut self.displays {
+            display.windows.clear();
+
+            display.windows = windows
+                .iter()
+                .filter(|x| x.should_tile())
+                .filter(|x| x.hmonitor == display.hmonitor)
+                .map(|x| x.to_owned())
+                .collect::<Vec<Window>>();
+        }
+    }
+
+    pub fn focus_display(&mut self, from: usize, direction: CycleDirection) {
+        let can_focus = self.displays.len() > 1;
+
+        if can_focus {
+            let to = match direction {
+                CycleDirection::Previous => {
+                    if from == 0 {
+                        self.displays.len() - 1
+                    } else {
+                        from - 1
+                    }
+                }
+                CycleDirection::Next => {
+                    if from == self.displays.len() - 1 {
+                        0
+                    } else {
+                        from + 1
+                    }
+                }
+            };
+
+            let target = self.displays[to].borrow_mut();
+            if let Some(window) = target.windows.first() {
+                window.set_foreground();
+                target.follow_focus_with_mouse(0)
+            } else {
+                target.set_cursor_pos_to_centre();
+                let mut enigo = Enigo::new();
+                enigo.mouse_click(MouseButton::Left)
+            }
+        }
+    }
+
+    pub fn focus_display_number(&mut self, to: usize) {
+        let can_focus = to <= self.displays.len() && to > 0;
+
+        if can_focus {
+            let to = to - 1;
+
+            let target = self.displays[to].borrow_mut();
+            if let Some(window) = target.windows.first() {
+                window.set_foreground();
+                target.follow_focus_with_mouse(0)
+            } else {
+                target.set_cursor_pos_to_centre();
+                let mut enigo = Enigo::new();
+                enigo.mouse_click(MouseButton::Left)
+            }
+        }
+    }
+
+    pub fn move_window_to_display(
+        &mut self,
+        window_idx: usize,
+        from: usize,
+        direction: CycleDirection,
+    ) {
+        let can_move = self.displays.len() > 1;
+
+        if can_move {
+            let to = match direction {
+                CycleDirection::Previous => {
+                    if from == 0 {
+                        self.displays.len() - 1
+                    } else {
+                        from - 1
+                    }
+                }
+                CycleDirection::Next => {
+                    if from == self.displays.len() - 1 {
+                        0
+                    } else {
+                        from + 1
+                    }
+                }
+            };
+
+            let window = {
+                let origin = self.displays[from].borrow_mut();
+                let window = origin.windows.remove(window_idx);
+                origin.calculate_layout();
+                origin.apply_layout(None);
+                window
+            };
+
+            let target = self.displays[to].borrow_mut();
+            target.windows.insert(0, window);
+            target.calculate_layout();
+            target.apply_layout(Option::from(0));
+        }
+    }
+
+    pub fn move_window_to_display_number(&mut self, window_idx: usize, from: usize, to: usize) {
+        let can_move = to <= self.displays.len() && to > 0;
+
+        if can_move {
+            let to = to - 1;
+
+            let window = {
+                let origin = self.displays[from].borrow_mut();
+                let window = origin.windows.remove(window_idx);
+                origin.calculate_layout();
+                origin.apply_layout(None);
+                window
+            };
+
+            let target = self.displays[to].borrow_mut();
+            target.windows.insert(0, window);
+            target.calculate_layout();
+            target.apply_layout(Option::from(0));
+        }
+    }
+
+    pub fn calculate_layouts(&mut self) {
+        for display in &mut self.displays {
+            display.calculate_layout()
+        }
+    }
+
+    pub fn apply_layouts(&mut self, new_focus: Option<usize>) {
+        for display in &mut self.displays {
+            display.apply_layout(new_focus)
+        }
+    }
+}
+
 impl Default for Desktop {
     fn default() -> Self {
         let mut desktop = Desktop {
-            dimensions:        Rect::zero(),
-            windows:           vec![],
-            layout_dimensions: vec![],
-            layout:            Layout::BSPV,
-            foreground_window: Window::default(),
-            gaps:              5,
-            paused:            false,
+            displays: vec![],
+            paused:   false,
         };
 
-        desktop.get_dimensions();
+        desktop.enumerate_display_monitors();
+
+        desktop.displays.sort_by(|x, y| {
+            let ordering = y.dimensions.x.cmp(&x.dimensions.x);
+
+            if ordering == Ordering::Equal {
+                return y.dimensions.y.cmp(&x.dimensions.y);
+            }
+
+            ordering
+        });
+
         desktop.get_visible_windows();
-        desktop.get_foreground_window();
-        desktop.calculate_layout();
-        desktop.apply_layout(None);
+        for display in &mut desktop.displays {
+            display.get_foreground_window()
+        }
+
+        desktop.calculate_layouts();
+        desktop.apply_layouts(None);
 
         desktop
     }
@@ -336,11 +518,52 @@ impl Default for Desktop {
 extern "system" fn enum_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
     let windows = unsafe { &mut *(lparam.0 as *mut Vec<Window>) };
 
-    let w = Window { hwnd, tile: true };
+    let hmonitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY as u32) };
+
+    let w = Window {
+        hwnd,
+        hmonitor,
+        tile: true,
+    };
 
     if w.is_visible() && !w.is_minimized() && w.should_manage(None) {
         windows.push(w)
     }
+
+    true.into()
+}
+
+extern "system" fn enum_display_monitor(
+    monitor: isize,
+    _: HDC,
+    _: *mut RECT,
+    lparam: LPARAM,
+) -> BOOL {
+    let displays = unsafe { &mut *(lparam.0 as *mut Vec<Display>) };
+
+    let mut rect: Rect = unsafe {
+        let mut info: MONITORINFO = mem::zeroed();
+        info.cb_size = mem::size_of::<MONITORINFO>() as u32;
+
+        GetMonitorInfoW(monitor, &mut info as *mut MONITORINFO as *mut _);
+
+        info.rc_work.into()
+    };
+
+    rect.height -= PADDING * 2;
+    rect.width -= PADDING * 2;
+    rect.y += PADDING;
+    rect.x += PADDING;
+
+    displays.push(Display {
+        dimensions:        rect,
+        foreground_window: Window::default(),
+        gaps:              5,
+        hmonitor:          monitor,
+        layout:            Layout::BSPV,
+        layout_dimensions: vec![],
+        windows:           vec![],
+    });
 
     true.into()
 }

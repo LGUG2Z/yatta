@@ -17,6 +17,10 @@ enum SubCommand {
     AdjustGaps(Sizing),
     Focus(OperationDirection),
     Move(OperationDirection),
+    MoveToDisplay(CycleDirection),
+    MoveToDisplayNumber(DisplayNumber),
+    FocusDisplay(CycleDirection),
+    FocusDisplayNumber(DisplayNumber),
     Promote,
     Retile,
     GapSize(Gap),
@@ -35,6 +39,11 @@ enum SubCommand {
 #[derive(Clap)]
 struct Gap {
     size: i32,
+}
+
+#[derive(Clap)]
+struct DisplayNumber {
+    target: usize,
 }
 
 #[derive(Clap)]
@@ -79,6 +88,28 @@ fn main() {
         }
         SubCommand::Move(direction) => {
             let bytes = SocketMessage::MoveWindow(direction).as_bytes().unwrap();
+            send_message(&*bytes);
+        }
+        SubCommand::MoveToDisplay(direction) => {
+            let bytes = SocketMessage::MoveWindowToDisplay(direction)
+                .as_bytes()
+                .unwrap();
+            send_message(&*bytes);
+        }
+        SubCommand::MoveToDisplayNumber(display_number) => {
+            let bytes = SocketMessage::MoveWindowToDisplayNumber(display_number.target)
+                .as_bytes()
+                .unwrap();
+            send_message(&*bytes);
+        }
+        SubCommand::FocusDisplay(direction) => {
+            let bytes = SocketMessage::FocusDisplay(direction).as_bytes().unwrap();
+            send_message(&*bytes);
+        }
+        SubCommand::FocusDisplayNumber(display_number) => {
+            let bytes = SocketMessage::FocusDisplayNumber(display_number.target)
+                .as_bytes()
+                .unwrap();
             send_message(&*bytes);
         }
         SubCommand::GapSize(gap) => {

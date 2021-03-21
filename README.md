@@ -44,28 +44,25 @@ starting point for your own:
 
 ```ahk
 ; Start yatta, this command makes sure no duplicate processes will be created
-Run, yattac.exe start, Hide
+Run, yattac.exe start, , Hide
 
 ; Send the configuration options for yatta here
-;
-; Ensure there are 3 virtual desktops
-Run, yattac.exe ensure-desktops 3, Hide
-
-; Always open Signal in Desktop 2
-Run, yattac.exe exe-desktop Signal.exe 2, Hide
-; Always open Ferdi in Desktop 2
-Run, yattac.exe exe-desktop Ferdi.exe 2, Hide
 
 ; Always float IntelliJ popups, matching on class
-Run, yattac.exe float-class SunAwtDialog, Hide
-; Always float Control Panel, matching on class
-Run, yattac.exe float-class CabinetWClass, Hide
+Run, yattac.exe float-class SunAwtDialog, , Hide
+
+; Always float Control Panel, matching on title
+Run, yattac.exe float-title "Control Panel", , Hide
+
 ; Always float Task Manager, matching on class
-Run, yattac.exe float-class TaskManagerWindow, Hide
+Run, yattac.exe float-class TaskManagerWindow, , Hide
+
 ; Always float Wally, matching on executable name
-Run, yattac.exe float-exe Wally.exe, Hide
+Run, yattac.exe float-exe Wally.exe, , Hide
+
 ; Always float Calculator app, matching on window title
-Run, yattac.exe float-title Calculator, Hide
+Run, yattac.exe float-title Calculator, , Hide
+Run, yattac.exe float-exe 1Password.exe, , Hide
 
 ; Change the focused window, Alt + Vim direction keys
 !h::
@@ -107,6 +104,16 @@ return
 Run, yattac.exe move right, Hide
 return
 
+; Move the focused window to the previous display, Alt + Shift + Left
+!+Left::
+Run, yattac.exe move-to-display previous, Hide
+return
+
+; Move the focused window to the next display, Alt + Shift + Right
+!+Left::
+Run, yattac.exe move-to-display next, Hide
+return
+
 ; Promote the focused window to the top of the tree, Alt + Shift + Enter
 !+Enter::
 Run, yattac.exe promote, Hide
@@ -122,13 +129,18 @@ return
 Run, yattac.exe layout bspv, Hide
 return
 
+; Toggle the Monocle layout, Alt + Shift + F
+!+f::
+Run, yattac.exe toggle-monocle, Hide
+return
+
 ; Force a retile if things get janky, Alt + Shift + R
 !+r::
 Run, yattac.exe retile, Hide
 return
 
-; Float the focused window, Alt + Shift + F
-!+f::
+; Float the focused window, Alt + T
+!t::
 Run, yattac.exe toggle-float, Hide
 return
 
