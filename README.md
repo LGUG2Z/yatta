@@ -110,7 +110,7 @@ Run, yattac.exe move-to-display previous, Hide
 return
 
 ; Move the focused window to the next display, Alt + Shift + Right
-!+Left::
+!+Right::
 Run, yattac.exe move-to-display next, Hide
 return
 
