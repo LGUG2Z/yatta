@@ -242,6 +242,19 @@ impl DirectionOperation {
                 }
             }
             DirectionOperation::Move => {
+                let window_resize = display.windows[idx].resize.clone();
+                let new_window_resize = display.windows[new_idx].resize.clone();
+
+                {
+                    let window = display.windows[idx].borrow_mut();
+                    window.resize = new_window_resize;
+                }
+
+                {
+                    let new_window = display.windows[new_idx].borrow_mut();
+                    new_window.resize = window_resize;
+                }
+
                 display.windows.swap(idx, new_idx);
                 display.calculate_layout();
                 display.apply_layout(Option::from(new_idx));
@@ -360,6 +373,12 @@ fn handle_socket_message(
                             }
                         }
                         SocketMessage::Retile => {
+                            // Retiling should also rebalance the layout by resetting resizing
+                            // adjustments
+                            for window in d.windows.iter_mut() {
+                                window.resize = None
+                            }
+
                             d.get_foreground_window();
                             d.calculate_layout();
                             let idx = d.foreground_window.index(&d.windows);
@@ -391,6 +410,11 @@ fn handle_socket_message(
                         SocketMessage::FocusDisplayNumber(target) => {
                             desktop.focus_display_number(target);
                         }
+                        SocketMessage::ResizeWindow(edge, sizing) => {
+                            d.resize_window(edge, sizing);
+                            d.calculate_layout();
+                            d.apply_layout(None);
+                        }
                         SocketMessage::GapSize(size) => {
                             d.gaps = size;
                             d.calculate_layout();
@@ -412,11 +436,21 @@ fn handle_socket_message(
                             d.apply_layout(None);
                         }
                         SocketMessage::Layout(layout) => {
+                            // Layouts should always start in a balanced state
+                            for window in d.windows.iter_mut() {
+                                window.resize = None
+                            }
+
                             d.layout = layout;
                             d.calculate_layout();
                             d.apply_layout(None);
                         }
                         SocketMessage::CycleLayout(direction) => {
+                            // Layouts should always start in a balanced state
+                            for window in d.windows.iter_mut() {
+                                window.resize = None
+                            }
+
                             match direction {
                                 CycleDirection::Previous => d.layout.previous(),
                                 CycleDirection::Next => d.layout.next(),

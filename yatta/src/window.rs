@@ -103,6 +103,7 @@ pub struct Window {
     pub hwnd:     HWND,
     pub hmonitor: isize,
     pub tile:     bool,
+    pub resize:   Option<Rect>,
 }
 
 unsafe impl Send for Window {}
@@ -128,6 +129,7 @@ impl Window {
             hwnd,
             hmonitor,
             tile: true,
+            resize: None,
         }
     }
 
@@ -427,6 +429,7 @@ impl Default for Window {
             hwnd:     HWND(0),
             hmonitor: 0,
             tile:     true,
+            resize:   None,
         }
     }
 }

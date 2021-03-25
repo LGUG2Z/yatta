@@ -104,6 +104,40 @@ return
 Run, yattac.exe move right, Hide
 return
 
+; Increase the size of a given edge in the BSPV and BSPH layouts, Alt + Arrow Key
+!Left::
+Run, yattac.exe resize left increase, Hide
+return
+
+!Right::
+Run, yattac.exe resize right increase, Hide
+return
+
+!Up::
+Run, yattac.exe resize top increase, Hide
+return
+
+!Down::
+Run, yattac.exe resize bottom increase, Hide
+return
+
+; Decrease the size of a given edge in the BSPV and BSPH layouts, Alt + Shift + Arrow Key
+!+Left::
+Run, yattac.exe resize left decrease, Hide
+return
+
+!+Right::
+Run, yattac.exe resize right decrease, Hide
+return
+
+!+Up::
+Run, yattac.exe resize top decrease, Hide
+return
+
+!+Down::
+Run, yattac.exe resize bottom decrease, Hide
+return
+
 ; Move the focused window to the previous display, Alt + Shift + Left
 !+Left::
 Run, yattac.exe move-to-display previous, Hide

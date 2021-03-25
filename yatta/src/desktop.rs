@@ -1,4 +1,6 @@
-use std::{cmp::Ordering, mem};
+use std::{borrow::BorrowMut, cmp::Ordering, mem};
+
+use enigo::{Enigo, MouseButton, MouseControllable};
 
 use bindings::windows::{
     win32::{
@@ -23,11 +25,9 @@ use bindings::windows::{
     },
     BOOL,
 };
-use yatta_core::{CycleDirection, Layout};
+use yatta_core::{CycleDirection, Layout, ResizeEdge, Sizing};
 
 use crate::{rect::Rect, window::Window, DirectionOperation};
-use enigo::{Enigo, MouseButton, MouseControllable};
-use std::borrow::BorrowMut;
 
 #[derive(Debug, Clone)]
 pub struct Desktop {
@@ -44,6 +44,7 @@ pub struct Display {
     pub layout_dimensions: Vec<Rect>,
     pub foreground_window: Window,
     pub gaps:              i32,
+    pub resize_step:       i32,
 }
 
 impl Display {
@@ -77,6 +78,72 @@ impl Display {
         if let Some(window) = self.windows.get(idx) {
             window.set_cursor_pos(self.layout_dimensions[idx]);
         };
+    }
+
+    pub fn resize_window(&mut self, edge: ResizeEdge, sizing: Sizing) {
+        let idx = self.get_foreground_window_index();
+        let can_resize = match self.layout {
+            Layout::BSPV => match edge {
+                ResizeEdge::Left => self.windows.len() > 0 && idx != 0,
+                ResizeEdge::Top => self.windows.len() > 2 && idx != 0 && idx != 1,
+                ResizeEdge::Right => self.windows.len() > 1 && idx % 2 == 0,
+                ResizeEdge::Bottom => {
+                    self.windows.len() > 2 && idx != self.windows.len() - 1 && idx % 2 != 0
+                }
+            },
+            Layout::BSPH => match edge {
+                ResizeEdge::Left => self.windows.len() > 2 && idx != 0 && idx != 1,
+                ResizeEdge::Top => self.windows.len() > 1 && idx != 0,
+                ResizeEdge::Right => {
+                    self.windows.len() > 2 && idx != self.windows.len() - 1 && idx % 2 != 0
+                }
+                ResizeEdge::Bottom => self.windows.len() > 1 && idx % 2 == 0,
+            },
+            _ => false,
+        };
+
+        if can_resize {
+            if self.windows[idx].resize.is_none() {
+                self.windows[idx].resize = Option::from(Rect::zero())
+            }
+
+            if let Some(r) = self.windows[idx].resize.borrow_mut() {
+                match edge {
+                    ResizeEdge::Left => match sizing {
+                        Sizing::Increase => {
+                            r.x += -self.resize_step;
+                        }
+                        Sizing::Decrease => {
+                            r.x -= -self.resize_step;
+                        }
+                    },
+                    ResizeEdge::Top => match sizing {
+                        Sizing::Increase => {
+                            r.y += -self.resize_step;
+                        }
+                        Sizing::Decrease => {
+                            r.y -= -self.resize_step;
+                        }
+                    },
+                    ResizeEdge::Right => match sizing {
+                        Sizing::Increase => {
+                            r.width += self.resize_step;
+                        }
+                        Sizing::Decrease => {
+                            r.width -= self.resize_step;
+                        }
+                    },
+                    ResizeEdge::Bottom => match sizing {
+                        Sizing::Increase => {
+                            r.height += self.resize_step;
+                        }
+                        Sizing::Decrease => {
+                            r.height -= self.resize_step;
+                        }
+                    },
+                };
+            };
+        }
     }
 
     pub fn window_op_up(&mut self, op: DirectionOperation) {
@@ -219,16 +286,102 @@ impl Display {
         }
     }
 
+    fn calculate_resize_adjustments(&self) -> Vec<Option<Rect>> {
+        let windows: Vec<&Window> = self.windows.iter().filter(|x| x.should_tile()).collect();
+        let resize_dimensions: Vec<Option<Rect>> = windows.iter().map(|x| x.resize).collect();
+        let mut resize_adjustments = resize_dimensions.clone();
+
+        for (i, opt) in resize_dimensions.iter().enumerate() {
+            if let Some(r) = opt {
+                if i > 0 {
+                    if r.x != 0 {
+                        let range = if i == 1 {
+                            0..1
+                        } else if i & 1 != 0 {
+                            i - 1..i
+                        } else {
+                            i - 2..i
+                        };
+
+                        for n in range {
+                            let should_adjust = match self.layout {
+                                Layout::BSPV => n & 1 == 0,
+                                Layout::BSPH => n & 1 == 1,
+                                _ => unreachable!(),
+                            };
+
+                            if should_adjust {
+                                if let Some(rr) = resize_adjustments[n].borrow_mut() {
+                                    rr.width += r.x;
+                                } else {
+                                    resize_adjustments[n] = Option::from(Rect {
+                                        x:      0,
+                                        y:      0,
+                                        width:  r.x,
+                                        height: 0,
+                                    });
+                                }
+                            }
+                        }
+
+                        resize_adjustments[i] = None;
+                    }
+
+                    if r.y != 0 {
+                        let range = if i == 1 {
+                            0..1
+                        } else if i & 1 == 0 {
+                            i - 1..i
+                        } else {
+                            i - 2..i
+                        };
+
+                        for n in range {
+                            let should_adjust = match self.layout {
+                                Layout::BSPV => n & 1 == 1,
+                                Layout::BSPH => n & 1 == 0,
+                                _ => unreachable!(),
+                            };
+
+                            if should_adjust {
+                                if let Some(rr) = resize_adjustments[n].borrow_mut() {
+                                    rr.height += r.y;
+                                } else {
+                                    resize_adjustments[n] = Option::from(Rect {
+                                        x:      0,
+                                        y:      0,
+                                        width:  0,
+                                        height: r.y,
+                                    });
+                                }
+                            }
+                        }
+
+                        resize_adjustments[i] = None;
+                    }
+                }
+            }
+        }
+
+        resize_adjustments
+    }
+
     pub fn calculate_layout(&mut self) {
         let len = self.windows.iter().filter(|x| x.should_tile()).count();
+        let resize_adjustments = self.calculate_resize_adjustments();
 
         match self.layout {
-            Layout::Monocle => self.layout_dimensions = bsp(0, 1, self.dimensions, 1, self.gaps),
+            Layout::Monocle => {
+                self.layout_dimensions =
+                    bsp(0, 1, self.dimensions, 1, self.gaps, resize_adjustments)
+            }
             Layout::BSPV => {
-                self.layout_dimensions = bsp(0, len, self.dimensions, 1, self.gaps);
+                self.layout_dimensions =
+                    bsp(0, len, self.dimensions, 1, self.gaps, resize_adjustments);
             }
             Layout::BSPH => {
-                self.layout_dimensions = bsp(0, len, self.dimensions, 0, self.gaps);
+                self.layout_dimensions =
+                    bsp(0, len, self.dimensions, 0, self.gaps, resize_adjustments);
             }
             Layout::Columns => {
                 let width_f = self.dimensions.width as f32 / len as f32;
@@ -524,6 +677,7 @@ extern "system" fn enum_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
         hwnd,
         hmonitor,
         tile: true,
+        resize: None,
     };
 
     if w.is_visible() && !w.is_minimized() && w.should_manage(None) {
@@ -559,6 +713,7 @@ extern "system" fn enum_display_monitor(
         dimensions:        rect,
         foreground_window: Window::default(),
         gaps:              5,
+        resize_step:       50,
         hmonitor:          monitor,
         layout:            Layout::BSPV,
         layout_dimensions: vec![],
@@ -568,54 +723,75 @@ extern "system" fn enum_display_monitor(
     true.into()
 }
 
-fn bsp(i: usize, window_count: usize, area: Rect, vertical: usize, gaps: i32) -> Vec<Rect> {
+fn bsp(
+    i: usize,
+    window_count: usize,
+    area: Rect,
+    vertical: usize,
+    gaps: i32,
+    resize_dimensions: Vec<Option<Rect>>,
+) -> Vec<Rect> {
+    let mut a = area.clone();
+
+    let resized = if let Some(r) = resize_dimensions[i] {
+        a.x += r.x;
+        a.y += r.y;
+        a.width += r.width;
+        a.height += r.height;
+        a
+    } else {
+        area
+    };
+
     if window_count == 0 {
         vec![]
     } else if window_count == 1 {
         vec![Rect {
-            x:      area.x + gaps,
-            y:      area.y + gaps,
-            width:  area.width - gaps * 2,
-            height: area.height - gaps * 2,
+            x:      resized.x + gaps,
+            y:      resized.y + gaps,
+            width:  resized.width - gaps * 2,
+            height: resized.height - gaps * 2,
         }]
     } else if i % 2 == vertical {
         let mut res = vec![Rect {
-            x:      area.x + gaps,
-            y:      area.y + gaps,
-            width:  area.width - gaps * 2,
-            height: area.height / 2 - gaps * 2,
+            x:      resized.x + gaps,
+            y:      resized.y + gaps,
+            width:  resized.width - gaps * 2,
+            height: resized.height / 2 - gaps * 2,
         }];
         res.append(&mut bsp(
             i + 1,
             window_count - 1,
             Rect {
                 x:      area.x,
-                y:      area.y + area.height / 2,
+                y:      area.y + resized.height / 2,
                 width:  area.width,
-                height: area.height / 2,
+                height: area.height - resized.height / 2,
             },
             vertical,
             gaps,
+            resize_dimensions,
         ));
         res
     } else {
         let mut res = vec![Rect {
-            x:      area.x + gaps,
-            y:      area.y + gaps,
-            width:  area.width / 2 - gaps * 2,
-            height: area.height - gaps * 2,
+            x:      resized.x + gaps,
+            y:      resized.y + gaps,
+            width:  resized.width / 2 - gaps * 2,
+            height: resized.height - gaps * 2,
         }];
         res.append(&mut bsp(
             i + 1,
             window_count - 1,
             Rect {
-                x:      area.x + area.width / 2,
+                x:      area.x + resized.width / 2,
                 y:      area.y,
-                width:  area.width / 2,
+                width:  area.width - resized.width / 2,
                 height: area.height,
             },
             vertical,
             gaps,
+            resize_dimensions,
         ));
         res
     }

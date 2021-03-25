@@ -3,7 +3,7 @@ use std::io::Write;
 use clap::Clap;
 use uds_windows::UnixStream;
 
-use yatta_core::{CycleDirection, Layout, OperationDirection, Sizing, SocketMessage};
+use yatta_core::{CycleDirection, Layout, OperationDirection, ResizeEdge, Sizing, SocketMessage};
 
 #[derive(Clap)]
 #[clap(version = "1.0", author = "Jade I. <jadeiqbal@fastmail.com>")]
@@ -17,6 +17,7 @@ enum SubCommand {
     AdjustGaps(Sizing),
     Focus(OperationDirection),
     Move(OperationDirection),
+    Resize(Resize),
     MoveToDisplay(CycleDirection),
     MoveToDisplayNumber(DisplayNumber),
     FocusDisplay(CycleDirection),
@@ -34,6 +35,12 @@ enum SubCommand {
     FloatClass(FloatTarget),
     FloatExe(FloatTarget),
     FloatTitle(FloatTarget),
+}
+
+#[derive(Clap)]
+struct Resize {
+    edge:   ResizeEdge,
+    sizing: Sizing,
 }
 
 #[derive(Clap)]
@@ -88,6 +95,12 @@ fn main() {
         }
         SubCommand::Move(direction) => {
             let bytes = SocketMessage::MoveWindow(direction).as_bytes().unwrap();
+            send_message(&*bytes);
+        }
+        SubCommand::Resize(resize) => {
+            let bytes = SocketMessage::ResizeWindow(resize.edge, resize.sizing)
+                .as_bytes()
+                .unwrap();
             send_message(&*bytes);
         }
         SubCommand::MoveToDisplay(direction) => {

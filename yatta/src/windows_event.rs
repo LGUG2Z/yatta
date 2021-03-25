@@ -101,6 +101,7 @@ extern "system" fn handler(
         hwnd,
         hmonitor,
         tile: true,
+        resize: None,
     };
 
     let event_code = unsafe { ::std::mem::transmute(event) };
