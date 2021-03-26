@@ -19,7 +19,12 @@ use log::{error, info};
 use sysinfo::SystemExt;
 use uds_windows::UnixListener;
 
-use bindings::windows::win32::system_services::{HWND_TOP, SWP_NOMOVE, SWP_NOSIZE};
+use bindings::windows::win32::{
+    display_devices::POINT,
+    menus_and_resources::GetCursorPos,
+    system_services::{HWND_TOP, SWP_NOMOVE, SWP_NOSIZE},
+};
+
 use yatta_core::{CycleDirection, Layout, OperationDirection, ResizeEdge, Sizing, SocketMessage};
 
 use crate::{
@@ -28,6 +33,7 @@ use crate::{
     window::exe_name_from_path,
     windows_event::{WindowsEvent, WindowsEventListener, WindowsEventType},
 };
+use core::mem;
 
 mod desktop;
 mod message_loop;
@@ -163,7 +169,7 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
     );
 
     match ev.event_type {
-        WindowsEventType::ResizeStart => {
+        WindowsEventType::MoveResizeStart => {
             let idx = ev.window.index(&display.windows);
             let old_position = display.layout_dimensions[idx.unwrap_or(0)];
             ev.window.set_pos(
@@ -172,9 +178,9 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
                 Option::from(SWP_NOMOVE as u32 | SWP_NOSIZE as u32),
             )
         }
-        WindowsEventType::ResizeEnd => {
-            let idx = ev.window.index(&display.windows);
-            let old_position = display.layout_dimensions[idx.unwrap_or(0)];
+        WindowsEventType::MoveResizeEnd => {
+            let idx = ev.window.index(&display.windows).unwrap_or(0);
+            let old_position = display.layout_dimensions[idx];
             let new_position = ev.window.info().window_rect;
 
             let mut resize = Rect::zero();
@@ -183,11 +189,44 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
             resize.width = new_position.width - old_position.width;
             resize.height = new_position.height - old_position.height;
 
-            if resize.width == 0 && resize.height == 0 {
-                // TODO: Maybe get the cursor pos here and handle window dragging events as
-                // moves or warps
-                info!("ignoring probable window dragging event, only listening for window resizing events");
+            let is_move = resize.width == 0 && resize.height == 0;
+
+            if is_move {
+                info!("handling move event");
+                let mut target_window_idx = None;
+                let cursor_pos: POINT = unsafe {
+                    let mut cursor_pos: POINT = mem::zeroed();
+                    GetCursorPos(&mut cursor_pos);
+                    cursor_pos
+                };
+
+                for (i, window) in display.windows.iter().enumerate() {
+                    if window.hwnd != ev.window.hwnd {
+                        if display.layout_dimensions[i].contains_point((cursor_pos.x, cursor_pos.y))
+                        {
+                            target_window_idx = Option::from(i)
+                        }
+                    }
+                }
+
+                if let Some(new_idx) = target_window_idx {
+                    let window_resize = display.windows[idx].resize.clone();
+                    let new_window_resize = display.windows[new_idx].resize.clone();
+
+                    {
+                        let window = display.windows[idx].borrow_mut();
+                        window.resize = new_window_resize;
+                    }
+
+                    {
+                        let new_window = display.windows[new_idx].borrow_mut();
+                        new_window.resize = window_resize;
+                    }
+
+                    display.windows.swap(idx, new_idx);
+                }
             } else {
+                info!("handling resize event");
                 let mut ops = vec![];
 
                 if resize.x != 0 {
