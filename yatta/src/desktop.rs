@@ -113,6 +113,7 @@ impl Display {
         };
 
         if can_resize {
+            let layout = self.layout_dimensions[idx];
             if self.windows[idx].resize.is_none() {
                 self.windows[idx].resize = Option::from(Rect::zero())
             }
@@ -121,34 +122,52 @@ impl Display {
                 match edge {
                     ResizeEdge::Left => match sizing {
                         Sizing::Increase => {
-                            r.x += -resize_step;
+                            // Some final checks to make sure the user can't infinitely resize to
+                            // the point of pushing other windows out of bounds
+                            if ((r.x + resize_step) as f32) < layout.width as f32 / 1.5 {
+                                r.x += -resize_step;
+                            }
                         }
                         Sizing::Decrease => {
-                            r.x -= -resize_step;
+                            if ((r.x + resize_step) as f32) < layout.width as f32 / 1.5 {
+                                r.x -= -resize_step;
+                            }
                         }
                     },
                     ResizeEdge::Top => match sizing {
                         Sizing::Increase => {
-                            r.y += -resize_step;
+                            if ((r.y + resize_step) as f32) < layout.height as f32 / 1.5 {
+                                r.y += -resize_step;
+                            }
                         }
                         Sizing::Decrease => {
-                            r.y -= -resize_step;
+                            if ((r.y + resize_step) as f32) < layout.height as f32 / 1.5 {
+                                r.y -= -resize_step;
+                            }
                         }
                     },
                     ResizeEdge::Right => match sizing {
                         Sizing::Increase => {
-                            r.width += resize_step;
+                            if ((r.width + resize_step) as f32) < layout.width as f32 / 1.5 {
+                                r.width += resize_step;
+                            }
                         }
                         Sizing::Decrease => {
-                            r.width -= resize_step;
+                            if ((r.width + resize_step) as f32) < layout.width as f32 / 1.5 {
+                                r.width -= resize_step;
+                            }
                         }
                     },
                     ResizeEdge::Bottom => match sizing {
                         Sizing::Increase => {
-                            r.height += resize_step;
+                            if ((r.height + resize_step) as f32) < layout.height as f32 / 1.5 {
+                                r.height += resize_step;
+                            }
                         }
                         Sizing::Decrease => {
-                            r.height -= resize_step;
+                            if ((r.height + resize_step) as f32) < layout.height as f32 / 1.5 {
+                                r.height -= resize_step;
+                            }
                         }
                     },
                 };
