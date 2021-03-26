@@ -80,7 +80,13 @@ impl Display {
         };
     }
 
-    pub fn resize_window(&mut self, edge: ResizeEdge, sizing: Sizing) {
+    pub fn resize_window(&mut self, edge: ResizeEdge, sizing: Sizing, step: Option<i32>) {
+        let resize_step = if let Some(step) = step {
+            step
+        } else {
+            self.resize_step
+        };
+
         let idx = self.get_foreground_window_index();
         let can_resize = match self.layout {
             Layout::BSPV => match edge {
@@ -111,34 +117,34 @@ impl Display {
                 match edge {
                     ResizeEdge::Left => match sizing {
                         Sizing::Increase => {
-                            r.x += -self.resize_step;
+                            r.x += -resize_step;
                         }
                         Sizing::Decrease => {
-                            r.x -= -self.resize_step;
+                            r.x -= -resize_step;
                         }
                     },
                     ResizeEdge::Top => match sizing {
                         Sizing::Increase => {
-                            r.y += -self.resize_step;
+                            r.y += -resize_step;
                         }
                         Sizing::Decrease => {
-                            r.y -= -self.resize_step;
+                            r.y -= -resize_step;
                         }
                     },
                     ResizeEdge::Right => match sizing {
                         Sizing::Increase => {
-                            r.width += self.resize_step;
+                            r.width += resize_step;
                         }
                         Sizing::Decrease => {
-                            r.width -= self.resize_step;
+                            r.width -= resize_step;
                         }
                     },
                     ResizeEdge::Bottom => match sizing {
                         Sizing::Increase => {
-                            r.height += self.resize_step;
+                            r.height += resize_step;
                         }
                         Sizing::Decrease => {
-                            r.height -= self.resize_step;
+                            r.height -= resize_step;
                         }
                     },
                 };
@@ -292,9 +298,9 @@ impl Display {
         let mut resize_adjustments = resize_dimensions.clone();
 
         for (i, opt) in resize_dimensions.iter().enumerate() {
-            if let Some(r) = opt {
+            if let Some(resize_ref) = opt {
                 if i > 0 {
-                    if r.x != 0 {
+                    if resize_ref.x != 0 {
                         let range = if i == 1 {
                             0..1
                         } else if i & 1 != 0 {
@@ -311,23 +317,25 @@ impl Display {
                             };
 
                             if should_adjust {
-                                if let Some(rr) = resize_adjustments[n].borrow_mut() {
-                                    rr.width += r.x;
+                                if let Some(adjacent_resize) = resize_adjustments[n].borrow_mut() {
+                                    adjacent_resize.width += resize_ref.x;
                                 } else {
                                     resize_adjustments[n] = Option::from(Rect {
                                         x:      0,
                                         y:      0,
-                                        width:  r.x,
+                                        width:  resize_ref.x,
                                         height: 0,
                                     });
                                 }
                             }
                         }
 
-                        resize_adjustments[i] = None;
+                        if let Some(rr) = resize_adjustments[i].borrow_mut() {
+                            rr.x = 0;
+                        }
                     }
 
-                    if r.y != 0 {
+                    if resize_ref.y != 0 {
                         let range = if i == 1 {
                             0..1
                         } else if i & 1 == 0 {
@@ -344,20 +352,22 @@ impl Display {
                             };
 
                             if should_adjust {
-                                if let Some(rr) = resize_adjustments[n].borrow_mut() {
-                                    rr.height += r.y;
+                                if let Some(adjacent_resize) = resize_adjustments[n].borrow_mut() {
+                                    adjacent_resize.height += resize_ref.y;
                                 } else {
                                     resize_adjustments[n] = Option::from(Rect {
                                         x:      0,
                                         y:      0,
                                         width:  0,
-                                        height: r.y,
+                                        height: resize_ref.y,
                                     });
                                 }
                             }
                         }
 
-                        resize_adjustments[i] = None;
+                        if let Some(resize) = resize_adjustments[i].borrow_mut() {
+                            resize.y = 0;
+                        }
                     }
                 }
             }
@@ -368,18 +378,18 @@ impl Display {
 
     pub fn calculate_layout(&mut self) {
         let len = self.windows.iter().filter(|x| x.should_tile()).count();
-        let resize_adjustments = self.calculate_resize_adjustments();
 
         match self.layout {
             Layout::Monocle => {
-                self.layout_dimensions =
-                    bsp(0, 1, self.dimensions, 1, self.gaps, resize_adjustments)
+                self.layout_dimensions = bsp(0, 1, self.dimensions, 1, self.gaps, vec![]);
             }
             Layout::BSPV => {
+                let resize_adjustments = self.calculate_resize_adjustments();
                 self.layout_dimensions =
                     bsp(0, len, self.dimensions, 1, self.gaps, resize_adjustments);
             }
             Layout::BSPH => {
+                let resize_adjustments = self.calculate_resize_adjustments();
                 self.layout_dimensions =
                     bsp(0, len, self.dimensions, 0, self.gaps, resize_adjustments);
             }
@@ -733,12 +743,16 @@ fn bsp(
 ) -> Vec<Rect> {
     let mut a = area.clone();
 
-    let resized = if let Some(r) = resize_dimensions[i] {
-        a.x += r.x;
-        a.y += r.y;
-        a.width += r.width;
-        a.height += r.height;
-        a
+    let resized = if let Some(opt) = resize_dimensions.get(i) {
+        if let Some(r) = opt {
+            a.x += r.x;
+            a.y += r.y;
+            a.width += r.width;
+            a.height += r.height;
+            a
+        } else {
+            area
+        }
     } else {
         area
     };

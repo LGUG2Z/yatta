@@ -154,6 +154,8 @@ pub enum WindowsEventType {
     FocusChange,
     Hide,
     Show,
+    ResizeStart,
+    ResizeEnd,
 }
 
 impl WindowsEventType {
@@ -170,6 +172,8 @@ impl WindowsEventType {
             | WinEventCode::SystemMinimizeEnd => Some(Self::Show),
 
             WinEventCode::ObjectFocus | WinEventCode::SystemForeground => Some(Self::FocusChange),
+            WinEventCode::SystemMoveSizeStart => Some(Self::ResizeStart),
+            WinEventCode::SystemMoveSizeEnd => Some(Self::ResizeEnd),
             _ => None,
         }
     }

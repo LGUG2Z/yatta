@@ -19,7 +19,8 @@ use log::{error, info};
 use sysinfo::SystemExt;
 use uds_windows::UnixListener;
 
-use yatta_core::{CycleDirection, Layout, OperationDirection, Sizing, SocketMessage};
+use bindings::windows::win32::system_services::{HWND_TOP, SWP_NOMOVE, SWP_NOSIZE};
+use yatta_core::{CycleDirection, Layout, OperationDirection, ResizeEdge, Sizing, SocketMessage};
 
 use crate::{
     desktop::{Desktop, Display},
@@ -162,6 +163,86 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
     );
 
     match ev.event_type {
+        WindowsEventType::ResizeStart => {
+            let idx = ev.window.index(&display.windows);
+            let old_position = display.layout_dimensions[idx.unwrap_or(0)];
+            ev.window.set_pos(
+                old_position,
+                Option::from(HWND_TOP),
+                Option::from(SWP_NOMOVE as u32 | SWP_NOSIZE as u32),
+            )
+        }
+        WindowsEventType::ResizeEnd => {
+            let idx = ev.window.index(&display.windows);
+            let old_position = display.layout_dimensions[idx.unwrap_or(0)];
+            let new_position = ev.window.info().window_rect;
+
+            let mut resize = Rect::zero();
+            resize.x = new_position.x - old_position.x;
+            resize.y = new_position.y - old_position.y;
+            resize.width = new_position.width - old_position.width;
+            resize.height = new_position.height - old_position.height;
+
+            if resize.width == 0 && resize.height == 0 {
+                // TODO: Maybe get the cursor pos here and handle window dragging events as
+                // moves or warps
+                info!("ignoring probable window dragging event, only listening for window resizing events");
+            } else {
+                let mut ops = vec![];
+
+                if resize.x != 0 {
+                    resize.x *= 2;
+                    let sizing = if resize.x > 0 {
+                        Sizing::Decrease
+                    } else {
+                        Sizing::Increase
+                    };
+
+                    ops.push((ResizeEdge::Left, sizing, resize.x.abs()))
+                }
+
+                if resize.y != 0 {
+                    resize.y *= 2;
+                    let sizing = if resize.y > 0 {
+                        Sizing::Decrease
+                    } else {
+                        Sizing::Increase
+                    };
+
+                    ops.push((ResizeEdge::Top, sizing, resize.y.abs()))
+                }
+
+                if resize.width != 0 && resize.x == 0 {
+                    resize.width *= 2;
+                    let sizing = if resize.width > 0 {
+                        Sizing::Increase
+                    } else {
+                        Sizing::Decrease
+                    };
+
+                    ops.push((ResizeEdge::Right, sizing, resize.width.abs()))
+                }
+
+                if resize.height != 0 && resize.y == 0 {
+                    resize.height *= 2;
+                    let sizing = if resize.height > 0 {
+                        Sizing::Increase
+                    } else {
+                        Sizing::Decrease
+                    };
+
+                    ops.push((ResizeEdge::Bottom, sizing, resize.height.abs()))
+                }
+
+                for (edge, sizing, step) in ops {
+                    display.resize_window(edge, sizing, Option::from(step));
+                }
+
+                display.calculate_layout();
+            }
+
+            display.apply_layout(None);
+        }
         WindowsEventType::Show => {
             if display.windows.is_empty() {
                 display.windows.push(ev.window);
@@ -411,7 +492,7 @@ fn handle_socket_message(
                             desktop.focus_display_number(target);
                         }
                         SocketMessage::ResizeWindow(edge, sizing) => {
-                            d.resize_window(edge, sizing);
+                            d.resize_window(edge, sizing, None);
                             d.calculate_layout();
                             d.apply_layout(None);
                         }
