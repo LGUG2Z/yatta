@@ -113,59 +113,100 @@ impl Display {
         };
 
         if can_resize {
-            let layout = self.layout_dimensions[idx];
+            let vertical = match self.layout {
+                Layout::BSPV => 1,
+                Layout::BSPH => 0,
+                _ => unreachable!(),
+            };
+
+            // We want to reference the layout dimensions from a state where it's as if no
+            // ressize adjustments have been applied
+            let layout = bsp(
+                0,
+                self.windows.len(),
+                self.dimensions,
+                vertical,
+                self.gaps,
+                vec![],
+            )[idx];
+
             if self.windows[idx].resize.is_none() {
                 self.windows[idx].resize = Option::from(Rect::zero())
             }
 
             if let Some(r) = self.windows[idx].resize.borrow_mut() {
+                let max_divisor = 1.005;
                 match edge {
                     ResizeEdge::Left => match sizing {
                         Sizing::Increase => {
                             // Some final checks to make sure the user can't infinitely resize to
                             // the point of pushing other windows out of bounds
-                            if ((r.x + resize_step) as f32) < layout.width as f32 / 1.5 {
+
+                            // Note: These checks cannot take into account the changes made to the
+                            // edges of adjacent windows at operation time, so it is still possible
+                            // to push windows out of bounds by maxing out an Increase Left on a
+                            // Window with index 1, and then maxing out a Decrease Right on a Window
+                            // with index 0. I don't think it's worth trying to defensively program
+                            // against this; if people end up in this situation they are better off
+                            // just hitting the retile command
+                            let diff = ((r.x + -resize_step) as f32).abs();
+                            let max = layout.width as f32 / max_divisor;
+                            if diff < max {
                                 r.x += -resize_step;
                             }
                         }
                         Sizing::Decrease => {
-                            if ((r.x + resize_step) as f32) < layout.width as f32 / 1.5 {
+                            let diff = ((r.x - -resize_step) as f32).abs();
+                            let max = layout.width as f32 / max_divisor;
+                            if diff < max {
                                 r.x -= -resize_step;
                             }
                         }
                     },
                     ResizeEdge::Top => match sizing {
                         Sizing::Increase => {
-                            if ((r.y + resize_step) as f32) < layout.height as f32 / 1.5 {
+                            let diff = ((r.y + resize_step) as f32).abs();
+                            let max = layout.height as f32 / max_divisor;
+                            if diff < max {
                                 r.y += -resize_step;
                             }
                         }
                         Sizing::Decrease => {
-                            if ((r.y + resize_step) as f32) < layout.height as f32 / 1.5 {
+                            let diff = ((r.y - resize_step) as f32).abs();
+                            let max = layout.height as f32 / max_divisor;
+                            if diff < max {
                                 r.y -= -resize_step;
                             }
                         }
                     },
                     ResizeEdge::Right => match sizing {
                         Sizing::Increase => {
-                            if ((r.width + resize_step) as f32) < layout.width as f32 / 1.5 {
+                            let diff = ((r.width + resize_step) as f32).abs();
+                            let max = layout.width as f32 / max_divisor;
+                            if diff < max {
                                 r.width += resize_step;
                             }
                         }
                         Sizing::Decrease => {
-                            if ((r.width + resize_step) as f32) < layout.width as f32 / 1.5 {
+                            let diff = ((r.width - resize_step) as f32).abs();
+                            let max = layout.width as f32 / max_divisor;
+                            if diff < max {
                                 r.width -= resize_step;
                             }
                         }
                     },
                     ResizeEdge::Bottom => match sizing {
                         Sizing::Increase => {
-                            if ((r.height + resize_step) as f32) < layout.height as f32 / 1.5 {
+                            let diff = ((r.height + resize_step) as f32).abs();
+                            let max = layout.height as f32 / max_divisor;
+                            if diff < max {
                                 r.height += resize_step;
                             }
                         }
                         Sizing::Decrease => {
-                            if ((r.height + resize_step) as f32) < layout.height as f32 / 1.5 {
+                            let diff = ((r.height - resize_step) as f32).abs();
+                            let max = layout.height as f32 / max_divisor;
+                            if diff < max {
                                 r.height -= resize_step;
                             }
                         }
