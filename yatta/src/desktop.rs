@@ -92,7 +92,9 @@ impl Display {
             Layout::BSPV => match edge {
                 ResizeEdge::Left => self.windows.len() > 0 && idx != 0,
                 ResizeEdge::Top => self.windows.len() > 2 && idx != 0 && idx != 1,
-                ResizeEdge::Right => self.windows.len() > 1 && idx % 2 == 0,
+                ResizeEdge::Right => {
+                    self.windows.len() > 1 && idx % 2 == 0 && idx != self.windows.len() - 1
+                }
                 ResizeEdge::Bottom => {
                     self.windows.len() > 2 && idx != self.windows.len() - 1 && idx % 2 != 0
                 }
@@ -103,7 +105,9 @@ impl Display {
                 ResizeEdge::Right => {
                     self.windows.len() > 2 && idx != self.windows.len() - 1 && idx % 2 != 0
                 }
-                ResizeEdge::Bottom => self.windows.len() > 1 && idx % 2 == 0,
+                ResizeEdge::Bottom => {
+                    self.windows.len() > 1 && idx % 2 == 0 && idx != self.windows.len() - 1
+                }
             },
             _ => false,
         };

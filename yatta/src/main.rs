@@ -91,7 +91,7 @@ fn main() -> Result<()> {
             // Doing this because ::exists() doesn't work reliably on Windows via IntelliJ
             ErrorKind::NotFound => {}
             _ => {
-                panic!(error);
+                panic!("{}", error);
             }
         },
     }
@@ -143,7 +143,7 @@ fn main() -> Result<()> {
     }
 }
 
-fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) {
+fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) {
     let mut desktop = desktop.lock().unwrap();
     if desktop.paused {
         return;
@@ -260,8 +260,17 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
                 }
 
                 if !contains {
-                    let idx = display.get_foreground_window_index();
-                    display.windows.insert(idx + 1, ev.window);
+                    let idx = display.get_foreground_window_index() + 1;
+                    // If we are inserting where there is a window that has resize adjustments, take
+                    // over those resize adjustments and remove them from the window that is
+                    // currently there
+                    if let Some(current_window) = display.windows.get_mut(idx) {
+                        let resize = current_window.resize.clone();
+                        current_window.resize = None;
+                        ev.window.resize = resize;
+                    }
+
+                    display.windows.insert(idx, ev.window);
                     display.calculate_layout();
                     display.apply_layout(None);
 
@@ -279,9 +288,24 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
             }
         }
         WindowsEventType::Hide | WindowsEventType::Destroy => {
-            let index = ev.window.index(&display.windows);
-            let mut previous = index.unwrap_or(0);
+            let idx = ev.window.index(&display.windows);
+            let mut previous = idx.unwrap_or(0);
+            let mut next = idx.unwrap_or(0);
             previous = if previous == 0 { 0 } else { previous - 1 };
+            next = if next == 0 { 0 } else { next + 1 };
+
+            // If we are removing a window that has resize adjustments, take over those
+            // resize adjustments and add them from the window that is going to take the
+            // space of the window being removed
+            let resize = if let Some(current_window) = display.windows.get(idx.unwrap_or(0)) {
+                current_window.resize.clone()
+            } else {
+                None
+            };
+
+            if let Some(next_window) = display.windows.get_mut(next) {
+                next_window.resize = resize;
+            }
 
             display.windows.retain(|x| !ev.window.eq(x));
             display.calculate_layout();
@@ -291,18 +315,30 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
             }
         }
         WindowsEventType::FocusChange => {
-            display.calculate_layout();
-            display.apply_layout(None);
+            let mut contains = false;
 
-            display.foreground_window = ev.window;
-            if let Some(title) = ev.window.title() {
-                if let Ok(path) = ev.window.exe_path() {
-                    info!(
-                        "focusing window: {} - {} ({})",
-                        &exe_name_from_path(&path),
-                        &title,
-                        ev.window.hwnd.0
-                    );
+            for window in &display.windows {
+                if window.hwnd == ev.window.hwnd {
+                    contains = true;
+                }
+            }
+
+            // Only operate on windows we are tracking, some apps like explorer.exe send
+            // a focus change event before their show event
+            if contains {
+                display.calculate_layout();
+                display.apply_layout(None);
+
+                display.foreground_window = ev.window;
+                if let Some(title) = ev.window.title() {
+                    if let Ok(path) = ev.window.exe_path() {
+                        info!(
+                            "focusing window: {} - {} ({})",
+                            &exe_name_from_path(&path),
+                            &title,
+                            ev.window.hwnd.0
+                        );
+                    }
                 }
             }
         }
