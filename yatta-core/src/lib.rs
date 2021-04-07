@@ -8,6 +8,7 @@ pub enum SocketMessage {
     AdjustGaps(Sizing),
     FocusWindow(OperationDirection),
     MoveWindow(OperationDirection),
+    ResizeWindow(ResizeEdge, Sizing),
     MoveWindowToDisplay(CycleDirection),
     MoveWindowToDisplayNumber(usize),
     FocusDisplay(CycleDirection),
@@ -84,6 +85,16 @@ pub enum CycleDirection {
 pub enum Sizing {
     Increase,
     Decrease,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Display, EnumString)]
+#[strum(serialize_all = "snake_case")]
+#[derive(Clap)]
+pub enum ResizeEdge {
+    Left,
+    Top,
+    Right,
+    Bottom,
 }
 
 impl SocketMessage {

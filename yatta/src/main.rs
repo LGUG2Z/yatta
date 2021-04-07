@@ -19,7 +19,13 @@ use log::{error, info};
 use sysinfo::SystemExt;
 use uds_windows::UnixListener;
 
-use yatta_core::{CycleDirection, Layout, OperationDirection, Sizing, SocketMessage};
+use bindings::windows::win32::{
+    display_devices::POINT,
+    menus_and_resources::GetCursorPos,
+    system_services::{HWND_TOP, SWP_NOMOVE, SWP_NOSIZE},
+};
+
+use yatta_core::{CycleDirection, Layout, OperationDirection, ResizeEdge, Sizing, SocketMessage};
 
 use crate::{
     desktop::{Desktop, Display},
@@ -27,6 +33,7 @@ use crate::{
     window::exe_name_from_path,
     windows_event::{WindowsEvent, WindowsEventListener, WindowsEventType},
 };
+use core::mem;
 
 mod desktop;
 mod message_loop;
@@ -90,7 +97,7 @@ fn main() -> Result<()> {
             // Doing this because ::exists() doesn't work reliably on Windows via IntelliJ
             ErrorKind::NotFound => {}
             _ => {
-                panic!(error);
+                panic!("{}", error);
             }
         },
     }
@@ -142,7 +149,7 @@ fn main() -> Result<()> {
     }
 }
 
-fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) {
+fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) {
     let mut desktop = desktop.lock().unwrap();
     if desktop.paused {
         return;
@@ -162,6 +169,119 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
     );
 
     match ev.event_type {
+        WindowsEventType::MoveResizeStart => {
+            let idx = ev.window.index(&display.windows);
+            let old_position = display.layout_dimensions[idx.unwrap_or(0)];
+            ev.window.set_pos(
+                old_position,
+                Option::from(HWND_TOP),
+                Option::from(SWP_NOMOVE as u32 | SWP_NOSIZE as u32),
+            )
+        }
+        WindowsEventType::MoveResizeEnd => {
+            let idx = ev.window.index(&display.windows).unwrap_or(0);
+            let old_position = display.layout_dimensions[idx];
+            let new_position = ev.window.info().window_rect;
+
+            let mut resize = Rect::zero();
+            resize.x = new_position.x - old_position.x;
+            resize.y = new_position.y - old_position.y;
+            resize.width = new_position.width - old_position.width;
+            resize.height = new_position.height - old_position.height;
+
+            let is_move = resize.width == 0 && resize.height == 0;
+
+            if is_move {
+                info!("handling move event");
+                let mut target_window_idx = None;
+                let cursor_pos: POINT = unsafe {
+                    let mut cursor_pos: POINT = mem::zeroed();
+                    GetCursorPos(&mut cursor_pos);
+                    cursor_pos
+                };
+
+                for (i, window) in display.windows.iter().enumerate() {
+                    if window.hwnd != ev.window.hwnd {
+                        if display.layout_dimensions[i].contains_point((cursor_pos.x, cursor_pos.y))
+                        {
+                            target_window_idx = Option::from(i)
+                        }
+                    }
+                }
+
+                if let Some(new_idx) = target_window_idx {
+                    let window_resize = display.windows[idx].resize.clone();
+                    let new_window_resize = display.windows[new_idx].resize.clone();
+
+                    {
+                        let window = display.windows[idx].borrow_mut();
+                        window.resize = new_window_resize;
+                    }
+
+                    {
+                        let new_window = display.windows[new_idx].borrow_mut();
+                        new_window.resize = window_resize;
+                    }
+
+                    display.windows.swap(idx, new_idx);
+                }
+            } else {
+                info!("handling resize event");
+                let mut ops = vec![];
+
+                if resize.x != 0 {
+                    resize.x *= 2;
+                    let sizing = if resize.x > 0 {
+                        Sizing::Decrease
+                    } else {
+                        Sizing::Increase
+                    };
+
+                    ops.push((ResizeEdge::Left, sizing, resize.x.abs()))
+                }
+
+                if resize.y != 0 {
+                    resize.y *= 2;
+                    let sizing = if resize.y > 0 {
+                        Sizing::Decrease
+                    } else {
+                        Sizing::Increase
+                    };
+
+                    ops.push((ResizeEdge::Top, sizing, resize.y.abs()))
+                }
+
+                if resize.width != 0 && resize.x == 0 {
+                    resize.width *= 2;
+                    let sizing = if resize.width > 0 {
+                        Sizing::Increase
+                    } else {
+                        Sizing::Decrease
+                    };
+
+                    ops.push((ResizeEdge::Right, sizing, resize.width.abs()))
+                }
+
+                if resize.height != 0 && resize.y == 0 {
+                    resize.height *= 2;
+                    let sizing = if resize.height > 0 {
+                        Sizing::Increase
+                    } else {
+                        Sizing::Decrease
+                    };
+
+                    ops.push((ResizeEdge::Bottom, sizing, resize.height.abs()))
+                }
+
+                for (edge, sizing, step) in ops {
+                    display.resize_window(edge, sizing, Option::from(step));
+                }
+
+                display.calculate_layout();
+            }
+
+            display.apply_layout(None);
+        }
         WindowsEventType::Show => {
             if display.windows.is_empty() {
                 display.windows.push(ev.window);
@@ -179,8 +299,17 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
                 }
 
                 if !contains {
-                    let idx = display.get_foreground_window_index();
-                    display.windows.insert(idx + 1, ev.window);
+                    let idx = display.get_foreground_window_index() + 1;
+                    // If we are inserting where there is a window that has resize adjustments, take
+                    // over those resize adjustments and remove them from the window that is
+                    // currently there
+                    if let Some(current_window) = display.windows.get_mut(idx) {
+                        let resize = current_window.resize.clone();
+                        current_window.resize = None;
+                        ev.window.resize = resize;
+                    }
+
+                    display.windows.insert(idx, ev.window);
                     display.calculate_layout();
                     display.apply_layout(None);
 
@@ -198,9 +327,24 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
             }
         }
         WindowsEventType::Hide | WindowsEventType::Destroy => {
-            let index = ev.window.index(&display.windows);
-            let mut previous = index.unwrap_or(0);
+            let idx = ev.window.index(&display.windows);
+            let mut previous = idx.unwrap_or(0);
+            let mut next = idx.unwrap_or(0);
             previous = if previous == 0 { 0 } else { previous - 1 };
+            next = if next == 0 { 0 } else { next + 1 };
+
+            // If we are removing a window that has resize adjustments, take over those
+            // resize adjustments and add them from the window that is going to take the
+            // space of the window being removed
+            let resize = if let Some(current_window) = display.windows.get(idx.unwrap_or(0)) {
+                current_window.resize.clone()
+            } else {
+                None
+            };
+
+            if let Some(next_window) = display.windows.get_mut(next) {
+                next_window.resize = resize;
+            }
 
             display.windows.retain(|x| !ev.window.eq(x));
             display.calculate_layout();
@@ -210,18 +354,30 @@ fn handle_windows_event_message(ev: WindowsEvent, desktop: Arc<Mutex<Desktop>>) 
             }
         }
         WindowsEventType::FocusChange => {
-            display.calculate_layout();
-            display.apply_layout(None);
+            let mut contains = false;
 
-            display.foreground_window = ev.window;
-            if let Some(title) = ev.window.title() {
-                if let Ok(path) = ev.window.exe_path() {
-                    info!(
-                        "focusing window: {} - {} ({})",
-                        &exe_name_from_path(&path),
-                        &title,
-                        ev.window.hwnd.0
-                    );
+            for window in &display.windows {
+                if window.hwnd == ev.window.hwnd {
+                    contains = true;
+                }
+            }
+
+            // Only operate on windows we are tracking, some apps like explorer.exe send
+            // a focus change event before their show event
+            if contains {
+                display.calculate_layout();
+                display.apply_layout(None);
+
+                display.foreground_window = ev.window;
+                if let Some(title) = ev.window.title() {
+                    if let Ok(path) = ev.window.exe_path() {
+                        info!(
+                            "focusing window: {} - {} ({})",
+                            &exe_name_from_path(&path),
+                            &title,
+                            ev.window.hwnd.0
+                        );
+                    }
                 }
             }
         }
@@ -242,6 +398,19 @@ impl DirectionOperation {
                 }
             }
             DirectionOperation::Move => {
+                let window_resize = display.windows[idx].resize.clone();
+                let new_window_resize = display.windows[new_idx].resize.clone();
+
+                {
+                    let window = display.windows[idx].borrow_mut();
+                    window.resize = new_window_resize;
+                }
+
+                {
+                    let new_window = display.windows[new_idx].borrow_mut();
+                    new_window.resize = window_resize;
+                }
+
                 display.windows.swap(idx, new_idx);
                 display.calculate_layout();
                 display.apply_layout(Option::from(new_idx));
@@ -360,6 +529,12 @@ fn handle_socket_message(
                             }
                         }
                         SocketMessage::Retile => {
+                            // Retiling should also rebalance the layout by resetting resizing
+                            // adjustments
+                            for window in d.windows.iter_mut() {
+                                window.resize = None
+                            }
+
                             d.get_foreground_window();
                             d.calculate_layout();
                             let idx = d.foreground_window.index(&d.windows);
@@ -391,6 +566,11 @@ fn handle_socket_message(
                         SocketMessage::FocusDisplayNumber(target) => {
                             desktop.focus_display_number(target);
                         }
+                        SocketMessage::ResizeWindow(edge, sizing) => {
+                            d.resize_window(edge, sizing, None);
+                            d.calculate_layout();
+                            d.apply_layout(None);
+                        }
                         SocketMessage::GapSize(size) => {
                             d.gaps = size;
                             d.calculate_layout();
@@ -412,11 +592,21 @@ fn handle_socket_message(
                             d.apply_layout(None);
                         }
                         SocketMessage::Layout(layout) => {
+                            // Layouts should always start in a balanced state
+                            for window in d.windows.iter_mut() {
+                                window.resize = None
+                            }
+
                             d.layout = layout;
                             d.calculate_layout();
                             d.apply_layout(None);
                         }
                         SocketMessage::CycleLayout(direction) => {
+                            // Layouts should always start in a balanced state
+                            for window in d.windows.iter_mut() {
+                                window.resize = None
+                            }
+
                             match direction {
                                 CycleDirection::Previous => d.layout.previous(),
                                 CycleDirection::Next => d.layout.next(),

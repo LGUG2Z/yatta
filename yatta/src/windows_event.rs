@@ -101,6 +101,7 @@ extern "system" fn handler(
         hwnd,
         hmonitor,
         tile: true,
+        resize: None,
     };
 
     let event_code = unsafe { ::std::mem::transmute(event) };
@@ -153,6 +154,8 @@ pub enum WindowsEventType {
     FocusChange,
     Hide,
     Show,
+    MoveResizeStart,
+    MoveResizeEnd,
 }
 
 impl WindowsEventType {
@@ -169,6 +172,8 @@ impl WindowsEventType {
             | WinEventCode::SystemMinimizeEnd => Some(Self::Show),
 
             WinEventCode::ObjectFocus | WinEventCode::SystemForeground => Some(Self::FocusChange),
+            WinEventCode::SystemMoveSizeStart => Some(Self::MoveResizeStart),
+            WinEventCode::SystemMoveSizeEnd => Some(Self::MoveResizeEnd),
             _ => None,
         }
     }
