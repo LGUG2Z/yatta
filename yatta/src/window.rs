@@ -4,13 +4,18 @@ use anyhow::Result;
 use bitflags::bitflags;
 use log::debug;
 
-use bindings::windows::win32::{
-    dwm::{DwmGetWindowAttribute, DWMWINDOWATTRIBUTE},
-    gdi::MonitorFromWindow,
-    keyboard_and_mouse_input::SetFocus,
-    menus_and_resources::SetCursorPos,
-    system_services::*,
-    windows_and_messaging::{
+use bindings::Windows::Win32::{
+    Dwm::{DwmGetWindowAttribute, DWMWINDOWATTRIBUTE},
+    Gdi::{MonitorFromWindow, HMONITOR, MONITOR_FROM_FLAGS},
+    KeyboardAndMouseInput::SetFocus,
+    SystemServices::{
+        OpenProcess,
+        QueryFullProcessImageNameW,
+        PROCESS_ACCESS_RIGHTS,
+        PROCESS_NAME_FORMAT,
+        PWSTR,
+    },
+    WindowsAndMessaging::{
         GetForegroundWindow,
         GetWindowInfo,
         GetWindowLongW,
@@ -21,11 +26,18 @@ use bindings::windows::win32::{
         IsWindow,
         IsWindowVisible,
         RealGetWindowClassW,
+        SetCursorPos,
         SetForegroundWindow,
         SetWindowPos,
         ShowWindow,
         HWND,
+        HWND_BOTTOM,
+        SET_WINDOW_POS_FLAGS,
+        SHOW_WINDOW_CMD,
         WINDOWINFO,
+        WINDOW_EX_STYLE,
+        WINDOW_LONG_PTR_INDEX,
+        WINDOW_STYLE,
     },
 };
 
@@ -33,75 +45,74 @@ use crate::{rect::Rect, windows_event::WindowsEventType, FLOAT_CLASSES, FLOAT_EX
 
 bitflags! {
     #[derive(Default)]
-    pub struct GwlStyle: i32 {
-        const BORDER = WS_BORDER as i32;
-        const CAPTION = WS_CAPTION as i32;
-        const CHILD = WS_CHILD as i32;
-        const CHILDWINDOW = WS_CHILDWINDOW as i32;
-        const CLIPCHILDREN = WS_CLIPCHILDREN as i32;
-        const CLIPSIBLINGS = WS_CLIPSIBLINGS as i32;
-        const DISABLED = WS_DISABLED as i32;
-        const DLGFRAME = WS_DLGFRAME as i32;
-        const GROUP = WS_GROUP as i32;
-        const HSCROLL = WS_HSCROLL as i32;
-        const ICONIC = WS_ICONIC as i32;
-        const MAXIMIZE = WS_MAXIMIZE as i32;
-        const MAXIMIZEBOX = WS_MAXIMIZEBOX as i32;
-        const MINIMIZE = WS_MINIMIZE as i32;
-        const MINIMIZEBOX = WS_MINIMIZEBOX as i32;
-        const OVERLAPPED = WS_OVERLAPPED as i32;
-        const OVERLAPPEDWINDOW = WS_OVERLAPPEDWINDOW as i32;
-        const POPUP = WS_POPUP as i32;
-        const POPUPWINDOW = WS_POPUPWINDOW as i32;
-        const SIZEBOX = WS_SIZEBOX as i32;
-        const SYSMENU = WS_SYSMENU as i32;
-        const TABSTOP = WS_TABSTOP as i32;
-        const THICKFRAME = WS_THICKFRAME as i32;
-        const TILED = WS_TILED as i32;
-        const TILEDWINDOW = WS_TILEDWINDOW as i32;
-        const VISIBLE = WS_VISIBLE as i32;
-        const VSCROLL = WS_VSCROLL as i32;
+    pub struct GwlStyle: u32 {
+        const BORDER = WINDOW_STYLE::WS_BORDER.0;
+        const CAPTION = WINDOW_STYLE::WS_CAPTION.0;
+        const CHILD = WINDOW_STYLE::WS_CHILD.0;
+        const CHILDWINDOW = WINDOW_STYLE::WS_CHILDWINDOW.0;
+        const CLIPCHILDREN = WINDOW_STYLE::WS_CLIPCHILDREN.0;
+        const CLIPSIBLINGS = WINDOW_STYLE::WS_CLIPSIBLINGS.0;
+        const DISABLED = WINDOW_STYLE::WS_DISABLED.0;
+        const DLGFRAME = WINDOW_STYLE::WS_DLGFRAME.0;
+        const GROUP = WINDOW_STYLE::WS_GROUP.0;
+        const HSCROLL = WINDOW_STYLE::WS_HSCROLL.0;
+        const ICONIC = WINDOW_STYLE::WS_ICONIC.0;
+        const MAXIMIZE = WINDOW_STYLE::WS_MAXIMIZE.0;
+        const MAXIMIZEBOX = WINDOW_STYLE::WS_MAXIMIZEBOX.0;
+        const MINIMIZE = WINDOW_STYLE::WS_MINIMIZE.0;
+        const MINIMIZEBOX = WINDOW_STYLE::WS_MINIMIZEBOX.0;
+        const OVERLAPPED = WINDOW_STYLE::WS_OVERLAPPED.0;
+        const OVERLAPPEDWINDOW = WINDOW_STYLE::WS_OVERLAPPEDWINDOW.0;
+        const POPUP = WINDOW_STYLE::WS_POPUP.0;
+        const POPUPWINDOW = WINDOW_STYLE::WS_POPUPWINDOW.0;
+        const SIZEBOX = WINDOW_STYLE::WS_SIZEBOX.0;
+        const SYSMENU = WINDOW_STYLE::WS_SYSMENU.0;
+        const TABSTOP = WINDOW_STYLE::WS_TABSTOP.0;
+        const THICKFRAME = WINDOW_STYLE::WS_THICKFRAME.0;
+        const TILED = WINDOW_STYLE::WS_TILED.0;
+        const TILEDWINDOW = WINDOW_STYLE::WS_TILEDWINDOW.0;
+        const VISIBLE = WINDOW_STYLE::WS_VISIBLE.0;
+        const VSCROLL = WINDOW_STYLE::WS_VSCROLL.0;
     }
 }
 
 bitflags! {
     #[derive(Default)]
-    pub struct GwlExStyle: i32 {
-        const ACCEPTFILES = WS_EX_ACCEPTFILES as i32;
-        const APPWINDOW = WS_EX_APPWINDOW as i32;
-        const CLIENTEDGE = WS_EX_CLIENTEDGE as i32;
-        const COMPOSITED = WS_EX_COMPOSITED as i32;
-        const CONTEXTHELP = WS_EX_CONTEXTHELP as i32;
-        const CONTROLPARENT = WS_EX_CONTROLPARENT as i32;
-        const DLGMODALFRAME = WS_EX_DLGMODALFRAME as i32;
-        // This isn't available in windows-rs
-        const LAYERED = 0x00080000_i32;
-        const LAYOUTRTL = WS_EX_LAYOUTRTL as i32;
-        const LEFT = WS_EX_LEFT as i32;
-        const LEFTSCROLLBAR = WS_EX_LEFTSCROLLBAR as i32;
-        const LTRREADING = WS_EX_LTRREADING as i32;
-        const MDICHILD = WS_EX_MDICHILD as i32;
-        const NOACTIVATE = WS_EX_NOACTIVATE as i32;
-        const NOINHERITLAYOUT = WS_EX_NOINHERITLAYOUT as i32;
-        const NOPARENTNOTIFY = WS_EX_NOPARENTNOTIFY as i32;
-        const NOREDIRECTIONBITMAP = WS_EX_NOREDIRECTIONBITMAP as i32;
-        const OVERLAPPEDWINDOW = WS_EX_OVERLAPPEDWINDOW as i32;
-        const PALETTEWINDOW = WS_EX_PALETTEWINDOW as i32;
-        const RIGHT = WS_EX_RIGHT as i32;
-        const RIGHTSCROLLBAR = WS_EX_RIGHTSCROLLBAR as i32;
-        const RTLREADING = WS_EX_RTLREADING as i32;
-        const STATICEDGE = WS_EX_STATICEDGE as i32;
-        const TOOLWINDOW = WS_EX_TOOLWINDOW as i32;
-        const TOPMOST = WS_EX_TOPMOST as i32;
-        const TRANSPARENT = WS_EX_TRANSPARENT as i32;
-        const WINDOWEDGE = WS_EX_WINDOWEDGE as i32;
+    pub struct GwlExStyle: u32 {
+        const ACCEPTFILES = WINDOW_EX_STYLE::WS_EX_ACCEPTFILES.0;
+        const APPWINDOW = WINDOW_EX_STYLE::WS_EX_APPWINDOW.0;
+        const CLIENTEDGE = WINDOW_EX_STYLE::WS_EX_CLIENTEDGE.0;
+        const COMPOSITED = WINDOW_EX_STYLE::WS_EX_COMPOSITED.0;
+        const CONTEXTHELP = WINDOW_EX_STYLE::WS_EX_CONTEXTHELP.0;
+        const CONTROLPARENT = WINDOW_EX_STYLE::WS_EX_CONTROLPARENT.0;
+        const DLGMODALFRAME = WINDOW_EX_STYLE::WS_EX_DLGMODALFRAME.0;
+        const LAYERED = WINDOW_EX_STYLE::WS_EX_LAYERED.0;
+        const LAYOUTRTL = WINDOW_EX_STYLE::WS_EX_LAYOUTRTL.0;
+        const LEFT = WINDOW_EX_STYLE::WS_EX_LEFT.0;
+        const LEFTSCROLLBAR = WINDOW_EX_STYLE::WS_EX_LEFTSCROLLBAR.0;
+        const LTRREADING = WINDOW_EX_STYLE::WS_EX_LTRREADING.0;
+        const MDICHILD = WINDOW_EX_STYLE::WS_EX_MDICHILD.0;
+        const NOACTIVATE = WINDOW_EX_STYLE::WS_EX_NOACTIVATE.0;
+        const NOINHERITLAYOUT = WINDOW_EX_STYLE::WS_EX_NOINHERITLAYOUT.0;
+        const NOPARENTNOTIFY = WINDOW_EX_STYLE::WS_EX_NOPARENTNOTIFY.0;
+        const NOREDIRECTIONBITMAP = WINDOW_EX_STYLE::WS_EX_NOREDIRECTIONBITMAP.0;
+        const OVERLAPPEDWINDOW = WINDOW_EX_STYLE::WS_EX_OVERLAPPEDWINDOW.0;
+        const PALETTEWINDOW = WINDOW_EX_STYLE::WS_EX_PALETTEWINDOW.0;
+        const RIGHT = WINDOW_EX_STYLE::WS_EX_RIGHT.0;
+        const RIGHTSCROLLBAR = WINDOW_EX_STYLE::WS_EX_RIGHTSCROLLBAR.0;
+        const RTLREADING = WINDOW_EX_STYLE::WS_EX_RTLREADING.0;
+        const STATICEDGE = WINDOW_EX_STYLE::WS_EX_STATICEDGE.0;
+        const TOOLWINDOW = WINDOW_EX_STYLE::WS_EX_TOOLWINDOW.0;
+        const TOPMOST = WINDOW_EX_STYLE::WS_EX_TOPMOST.0;
+        const TRANSPARENT = WINDOW_EX_STYLE::WS_EX_TRANSPARENT.0;
+        const WINDOWEDGE = WINDOW_EX_STYLE::WS_EX_WINDOWEDGE.0;
     }
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Window {
     pub hwnd:     HWND,
-    pub hmonitor: isize,
+    pub hmonitor: HMONITOR,
     pub tile:     bool,
     pub resize:   Option<Rect>,
 }
@@ -123,7 +134,8 @@ pub fn exe_name_from_path(path: &str) -> String {
 impl Window {
     pub fn foreground() -> Window {
         let hwnd = unsafe { GetForegroundWindow() };
-        let hmonitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY as u32) };
+        let hmonitor =
+            unsafe { MonitorFromWindow(hwnd, MONITOR_FROM_FLAGS::MONITOR_DEFAULTTOPRIMARY) };
 
         Window {
             hwnd,
@@ -173,7 +185,7 @@ impl Window {
         let mut buff: [u16; BUF_SIZE] = [0; BUF_SIZE];
 
         let writ_chars =
-            unsafe { RealGetWindowClassW(self.hwnd, buff.as_mut_ptr(), BUF_SIZE as u32) };
+            unsafe { RealGetWindowClassW(self.hwnd, PWSTR(buff.as_mut_ptr()), BUF_SIZE as u32) };
 
         if writ_chars == 0 {
             return Err(std::io::Error::last_os_error().into());
@@ -193,15 +205,21 @@ impl Window {
         let (pid, _) = self.thread_process_id();
         // PROCESS_QUERY_INFORMATION (0x0400)
         // https://docs.microsoft.com/en-us/windows/win32/procthread/process-security-and-access-rights
-        let handle = unsafe { OpenProcess(0x0400, false.into(), pid) };
+        let handle =
+            unsafe { OpenProcess(PROCESS_ACCESS_RIGHTS::PROCESS_QUERY_INFORMATION, false, pid) };
 
         let mut buf_len = 260_u32;
         let mut result: Vec<u16> = vec![0; buf_len as usize];
         let text_ptr = result.as_mut_ptr();
 
         unsafe {
-            let success: bool =
-                QueryFullProcessImageNameW(handle, 0, text_ptr, &mut buf_len as *mut u32).into();
+            let success: bool = QueryFullProcessImageNameW(
+                handle,
+                PROCESS_NAME_FORMAT(0),
+                PWSTR(text_ptr),
+                &mut buf_len as *mut u32,
+            )
+            .into();
             if !success {
                 return Err(std::io::Error::last_os_error().into());
             }
@@ -238,15 +256,18 @@ impl Window {
 
     pub fn get_style(&self) -> Result<GwlStyle> {
         unsafe {
-            nullable_to_result(GetWindowLongW(self.hwnd, GWL_STYLE))
-                .map(|x| GwlStyle::from_bits_unchecked(x as u32 as i32))
+            nullable_to_result(GetWindowLongW(self.hwnd, WINDOW_LONG_PTR_INDEX::GWL_STYLE))
+                .map(|x| GwlStyle::from_bits_unchecked(x as u32))
         }
     }
 
     pub fn get_ex_style(&self) -> Result<GwlExStyle> {
         unsafe {
-            nullable_to_result(GetWindowLongW(self.hwnd, GWL_EXSTYLE))
-                .map(|x| GwlExStyle::from_bits_unchecked(x as u32 as i32))
+            nullable_to_result(GetWindowLongW(
+                self.hwnd,
+                WINDOW_LONG_PTR_INDEX::GWL_EXSTYLE,
+            ))
+            .map(|x| GwlExStyle::from_bits_unchecked(x as u32))
         }
     }
 
@@ -318,7 +339,7 @@ impl Window {
 
     pub fn title(self) -> Option<String> {
         let mut text: [u16; 512] = [0; 512];
-        let len = unsafe { GetWindowTextW(self.hwnd, text.as_mut_ptr(), text.len() as i32) };
+        let len = unsafe { GetWindowTextW(self.hwnd, PWSTR(text.as_mut_ptr()), text.len() as i32) };
         let text = String::from_utf16_lossy(&text[..len as usize]);
 
         if text.is_empty() {
@@ -361,16 +382,21 @@ impl Window {
         }
     }
 
-    pub fn set_pos(&self, rect: Rect, insert_after: Option<i32>, flags: Option<u32>) {
+    pub fn set_pos(
+        &self,
+        rect: Rect,
+        insert_after: Option<HWND>,
+        flags: Option<SET_WINDOW_POS_FLAGS>,
+    ) {
         unsafe {
             SetWindowPos(
                 self.hwnd,
-                HWND(insert_after.unwrap_or(HWND_BOTTOM) as isize),
+                insert_after.unwrap_or(HWND_BOTTOM),
                 rect.x,
                 rect.y,
                 rect.width,
                 rect.height,
-                flags.unwrap_or(SWP_NOACTIVATE as u32),
+                flags.unwrap_or(SET_WINDOW_POS_FLAGS::SWP_NOACTIVATE),
             );
         }
     }
@@ -392,7 +418,7 @@ impl Window {
     pub fn info(self) -> WindowInfo {
         unsafe {
             let mut info: WINDOWINFO = mem::zeroed();
-            info.cb_size = mem::size_of::<WINDOWINFO>() as u32;
+            info.cbSize = mem::size_of::<WINDOWINFO>() as u32;
 
             GetWindowInfo(self.hwnd, &mut info);
 
@@ -418,7 +444,7 @@ impl Window {
 
     pub fn restore(&mut self) {
         unsafe {
-            ShowWindow(self.hwnd, SW_RESTORE);
+            ShowWindow(self.hwnd, SHOW_WINDOW_CMD::SW_RESTORE);
         };
     }
 }
@@ -427,7 +453,7 @@ impl Default for Window {
     fn default() -> Self {
         Window {
             hwnd:     HWND(0),
-            hmonitor: 0,
+            hmonitor: HMONITOR(0),
             tile:     true,
             resize:   None,
         }
@@ -454,13 +480,13 @@ pub struct WindowInfo {
 impl From<WINDOWINFO> for WindowInfo {
     fn from(info: WINDOWINFO) -> Self {
         WindowInfo {
-            window_rect:     info.rc_window.into(),
-            client_rect:     info.rc_client.into(),
-            styles:          info.dw_style,
-            extended_styles: info.dw_ex_style,
-            window_status:   info.dw_window_status,
-            x_borders:       info.cx_window_borders,
-            y_borders:       info.cy_window_borders,
+            window_rect:     info.rcWindow.into(),
+            client_rect:     info.rcClient.into(),
+            styles:          info.dwStyle,
+            extended_styles: info.dwExStyle,
+            window_status:   info.dwWindowStatus,
+            x_borders:       info.cxWindowBorders,
+            y_borders:       info.cyWindowBorders,
         }
     }
 }

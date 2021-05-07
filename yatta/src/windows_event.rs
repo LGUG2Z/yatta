@@ -13,11 +13,10 @@ use lazy_static::lazy_static;
 use log::{error, info};
 use strum::Display;
 
-use bindings::windows::win32::{
-    gdi::MonitorFromWindow,
-    system_services::{EVENT_MAX, EVENT_MIN, MONITOR_DEFAULTTOPRIMARY, OBJID_WINDOW},
-    windows_accessibility::SetWinEventHook,
-    windows_and_messaging::HWND,
+use bindings::Windows::Win32::{
+    Gdi::{MonitorFromWindow, MONITOR_FROM_FLAGS},
+    WindowsAccessibility::{SetWinEventHook, HWINEVENTHOOK},
+    WindowsAndMessaging::{EVENT_MAX, EVENT_MIN, HWND},
 };
 
 use crate::{
@@ -61,7 +60,7 @@ impl WindowsEventListener {
                 0,
             );
 
-            hook.store(hook_ref, Ordering::SeqCst);
+            hook.store(hook_ref.0, Ordering::SeqCst);
 
             info!("starting windows event listener");
             message_loop::start(|_| {
@@ -83,7 +82,7 @@ impl WindowsEventListener {
 }
 
 extern "system" fn handler(
-    _h_win_event_hook: isize,
+    _h_win_event_hook: HWINEVENTHOOK,
     event: u32,
     hwnd: HWND,
     id_object: i32,
@@ -91,11 +90,12 @@ extern "system" fn handler(
     _id_event_thread: u32,
     _dwms_event_time: u32,
 ) {
-    if id_object != OBJID_WINDOW {
+    // OBJID_WINDOW
+    if id_object != 0 {
         return;
     }
 
-    let hmonitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY as u32) };
+    let hmonitor = unsafe { MonitorFromWindow(hwnd, MONITOR_FROM_FLAGS::MONITOR_DEFAULTTOPRIMARY) };
 
     let window = Window {
         hwnd,

@@ -2,6 +2,7 @@ extern crate flexi_logger;
 #[macro_use] extern crate num_derive;
 extern crate num_traits;
 
+use core::mem;
 use std::{
     borrow::BorrowMut,
     collections::HashMap,
@@ -19,12 +20,10 @@ use log::{error, info};
 use sysinfo::SystemExt;
 use uds_windows::UnixListener;
 
-use bindings::windows::win32::{
-    display_devices::POINT,
-    menus_and_resources::GetCursorPos,
-    system_services::{HWND_TOP, SWP_NOMOVE, SWP_NOSIZE},
+use bindings::Windows::Win32::{
+    DisplayDevices::POINT,
+    WindowsAndMessaging::{GetCursorPos, HWND_TOP, SET_WINDOW_POS_FLAGS},
 };
-
 use yatta_core::{CycleDirection, Layout, OperationDirection, ResizeEdge, Sizing, SocketMessage};
 
 use crate::{
@@ -33,7 +32,6 @@ use crate::{
     window::exe_name_from_path,
     windows_event::{WindowsEvent, WindowsEventListener, WindowsEventType},
 };
-use core::mem;
 
 mod desktop;
 mod message_loop;
@@ -175,7 +173,7 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
             ev.window.set_pos(
                 old_position,
                 Option::from(HWND_TOP),
-                Option::from(SWP_NOMOVE as u32 | SWP_NOSIZE as u32),
+                Option::from(SET_WINDOW_POS_FLAGS::SWP_NOMOVE | SET_WINDOW_POS_FLAGS::SWP_NOSIZE),
             )
         }
         WindowsEventType::MoveResizeEnd => {
@@ -201,11 +199,10 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
                 };
 
                 for (i, window) in display.windows.iter().enumerate() {
-                    if window.hwnd != ev.window.hwnd {
-                        if display.layout_dimensions[i].contains_point((cursor_pos.x, cursor_pos.y))
-                        {
-                            target_window_idx = Option::from(i)
-                        }
+                    if window.hwnd != ev.window.hwnd
+                        && display.layout_dimensions[i].contains_point((cursor_pos.x, cursor_pos.y))
+                    {
+                        target_window_idx = Option::from(i)
                     }
                 }
 

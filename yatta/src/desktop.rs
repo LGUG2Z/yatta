@@ -2,28 +2,28 @@ use std::{borrow::BorrowMut, cmp::Ordering, mem};
 
 use enigo::{Enigo, MouseButton, MouseControllable};
 
-use bindings::windows::{
-    win32::{
-        display_devices::{POINT, RECT},
-        gdi::{
-            EnumDisplayMonitors,
-            GetMonitorInfoW,
-            MonitorFromPoint,
-            MonitorFromWindow,
-            HDC,
-            MONITORINFO,
-        },
-        menus_and_resources::{GetCursorPos, SetCursorPos},
-        system_services::{
-            HWND_NOTOPMOST,
-            MONITOR_DEFAULTTONEAREST,
-            MONITOR_DEFAULTTOPRIMARY,
-            SWP_NOMOVE,
-            SWP_NOSIZE,
-        },
-        windows_and_messaging::{EnumWindows, HWND, LPARAM},
+use bindings::Windows::Win32::{
+    DisplayDevices::{POINT, RECT},
+    Gdi::{
+        EnumDisplayMonitors,
+        GetMonitorInfoW,
+        MonitorFromPoint,
+        MonitorFromWindow,
+        HDC,
+        HMONITOR,
+        MONITORINFO,
+        MONITOR_FROM_FLAGS,
     },
-    BOOL,
+    SystemServices::BOOL,
+    WindowsAndMessaging::{
+        EnumWindows,
+        GetCursorPos,
+        SetCursorPos,
+        HWND,
+        HWND_NOTOPMOST,
+        LPARAM,
+        SET_WINDOW_POS_FLAGS,
+    },
 };
 use yatta_core::{CycleDirection, Layout, ResizeEdge, Sizing};
 
@@ -38,7 +38,7 @@ pub struct Desktop {
 #[derive(Debug, Clone)]
 pub struct Display {
     pub windows:           Vec<Window>,
-    pub hmonitor:          isize,
+    pub hmonitor:          HMONITOR,
     pub dimensions:        Rect,
     pub layout:            Layout,
     pub layout_dimensions: Vec<Rect>,
@@ -515,7 +515,9 @@ impl Display {
                         w.set_pos(
                             self.layout_dimensions[new_idx],
                             None,
-                            Option::from(SWP_NOMOVE as u32 | SWP_NOSIZE as u32),
+                            Option::from(
+                                SET_WINDOW_POS_FLAGS::SWP_NOMOVE | SET_WINDOW_POS_FLAGS::SWP_NOSIZE,
+                            ),
                         );
                     } else {
                         w.set_pos(self.layout_dimensions[i - skipped], None, None)
@@ -538,7 +540,7 @@ impl Desktop {
             let mut cursor_pos: POINT = mem::zeroed();
             GetCursorPos(&mut cursor_pos);
 
-            MonitorFromPoint(cursor_pos, MONITOR_DEFAULTTONEAREST as u32)
+            MonitorFromPoint(cursor_pos, MONITOR_FROM_FLAGS::MONITOR_DEFAULTTONEAREST)
         };
 
         for (i, display) in self.displays.iter().enumerate() {
@@ -745,7 +747,7 @@ impl Default for Desktop {
 extern "system" fn enum_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
     let windows = unsafe { &mut *(lparam.0 as *mut Vec<Window>) };
 
-    let hmonitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY as u32) };
+    let hmonitor = unsafe { MonitorFromWindow(hwnd, MONITOR_FROM_FLAGS::MONITOR_DEFAULTTOPRIMARY) };
 
     let w = Window {
         hwnd,
@@ -762,7 +764,7 @@ extern "system" fn enum_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
 }
 
 extern "system" fn enum_display_monitor(
-    monitor: isize,
+    monitor: HMONITOR,
     _: HDC,
     _: *mut RECT,
     lparam: LPARAM,
@@ -771,11 +773,11 @@ extern "system" fn enum_display_monitor(
 
     let mut rect: Rect = unsafe {
         let mut info: MONITORINFO = mem::zeroed();
-        info.cb_size = mem::size_of::<MONITORINFO>() as u32;
+        info.cbSize = mem::size_of::<MONITORINFO>() as u32;
 
         GetMonitorInfoW(monitor, &mut info as *mut MONITORINFO as *mut _);
 
-        info.rc_work.into()
+        info.rcWork.into()
     };
 
     rect.height -= PADDING * 2;

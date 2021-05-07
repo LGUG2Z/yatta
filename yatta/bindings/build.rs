@@ -1,12 +1,18 @@
 fn main() {
     windows::build!(
-        windows::win32::display_devices::*,
-        windows::win32::dwm::*,
-        windows::win32::gdi::*,
-        windows::win32::menus_and_resources::*,
-        windows::win32::system_services::*,
-        windows::win32::keyboard_and_mouse_input::*,
-        windows::win32::windows_accessibility::*,
-        windows::win32::windows_and_messaging::*,
+        Windows::Win32::DisplayDevices::{POINT, RECT},
+        Windows::Win32::Dwm::*,
+        Windows::Win32::Gdi::*,
+        Windows::Win32::SystemServices::{
+            PROCESS_ACCESS_RIGHTS,
+            BOOL,
+            PWSTR,
+            QueryFullProcessImageNameW,
+            PROCESS_NAME_FORMAT,
+            OpenProcess
+        },
+        Windows::Win32::KeyboardAndMouseInput::SetFocus,
+        Windows::Win32::WindowsAccessibility::{SetWinEventHook, HWINEVENTHOOK},
+        Windows::Win32::WindowsAndMessaging::*,
     );
 }
