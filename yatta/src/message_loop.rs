@@ -1,8 +1,12 @@
 use std::{thread, time::Duration};
 
-use bindings::windows::win32::{
-    system_services::PM_REMOVE,
-    windows_and_messaging::{DispatchMessageW, PeekMessageW, TranslateMessage, HWND, MSG},
+use bindings::Windows::Win32::WindowsAndMessaging::{
+    DispatchMessageW,
+    PeekMessageW,
+    TranslateMessage,
+    HWND,
+    MSG,
+    PEEK_MESSAGE_REMOVE_TYPE,
 };
 
 pub fn start(cb: impl Fn(Option<MSG>) -> bool) {
@@ -14,7 +18,13 @@ pub fn start_with_sleep(sleep: u64, cb: impl Fn(Option<MSG>) -> bool) {
     loop {
         let mut value: Option<MSG> = None;
         unsafe {
-            if !bool::from(!PeekMessageW(&mut msg, HWND(0), 0, 0, PM_REMOVE as u32)) {
+            if !bool::from(!PeekMessageW(
+                &mut msg,
+                HWND(0),
+                0,
+                0,
+                PEEK_MESSAGE_REMOVE_TYPE::PM_REMOVE,
+            )) {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
 
