@@ -54,6 +54,19 @@ pub struct Workspace {
     pub needs_recalc: bool
 }
 
+impl Workspace {
+    pub fn verify(&mut self, windows: &mut Vec<Window>) -> bool {
+        let mut changed = false;
+        self.windows.retain(|window| {
+            let result = !windows.contains(window) && window.is_window();
+            if !result { changed = true; }
+            windows.push(*window);
+            result
+        });
+        changed
+    }
+}
+
 impl Default for Workspace {
     fn default() -> Self {
         Workspace {
@@ -78,6 +91,26 @@ impl Display {
     pub fn create_workspace(&mut self, index: usize) {
         while self.workspaces.len() <= index {
             self.workspaces.push(Workspace::default());
+        }
+    }
+
+    pub fn verify(&mut self, windows: &mut Vec<Window>) -> bool {
+        let mut changed = false;
+        for workspace in &mut self.workspaces {
+            if workspace.verify(windows) {
+                changed = true;
+            }
+        }
+        if changed {
+            self.calculate_layout();
+            self.apply_layout(None);
+        }
+        changed
+    }
+
+    pub fn get_all_windows(&self, windows: &mut Vec<Window>) {
+        for workspace in &self.workspaces {
+            windows.append(&mut workspace.windows.clone());
         }
     }
 }
@@ -585,6 +618,25 @@ impl Desktop {
         }
 
         0
+    }
+
+    pub fn verify(&mut self) -> bool {
+        let mut windows: Vec<Window> = Vec::new();
+        let mut changed = false;
+        for display in &mut self.displays {
+            if display.verify(&mut windows) {
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    pub fn get_all_windows(&self) -> Vec<Window> {
+        let mut windows: Vec<Window> = Vec::new();
+        for display in &self.displays {
+            display.get_all_windows(&mut windows);
+        }
+        windows
     }
 
     pub fn enumerate_display_monitors(&mut self) {

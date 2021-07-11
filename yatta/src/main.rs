@@ -1,5 +1,6 @@
 extern crate flexi_logger;
-#[macro_use] extern crate num_derive;
+#[macro_use]
+extern crate num_derive;
 extern crate num_traits;
 
 use core::mem;
@@ -13,7 +14,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use crossbeam_channel::{select, unbounded, Receiver, Sender};
+use crossbeam_channel::{Receiver, select, Sender, unbounded};
 use flexi_logger::{colored_detailed_format, Duplicate};
 use lazy_static::lazy_static;
 use log::{error, info};
@@ -280,22 +281,14 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
             display.apply_layout(None);
         }
         WindowsEventType::Show => {
-            if display.get_current_workspace_mut().windows.is_empty() {
-                display.get_current_workspace_mut().windows.push(ev.window);
-                display.calculate_layout();
-                display.apply_layout(None);
-            } else {
-                // Some apps like Windows Terminal send multiple Events on startup, we don't
-                // want dupes
-                let mut contains = false;
-
-                for window in &display.get_current_workspace_mut().windows {
-                    if window.hwnd == ev.window.hwnd {
-                        contains = true;
-                    }
-                }
-
-                if !contains {
+            let mut all_windows = Vec::new();
+            display.get_all_windows(&mut all_windows);
+            if !all_windows.contains(&ev.window) {
+                if display.get_current_workspace_mut().windows.is_empty() {
+                    display.get_current_workspace_mut().windows.push(ev.window);
+                    display.calculate_layout();
+                    display.apply_layout(None);
+                } else {
                     let idx = display.get_foreground_window_index() + 1;
                     // If we are inserting where there is a window that has resize adjustments, take
                     // over those resize adjustments and remove them from the window that is
@@ -479,11 +472,11 @@ fn handle_socket_message(
                                         let w2 = d.dimensions.width / 2;
                                         let h2 = d.dimensions.height / 2;
                                         let center = Rect {
-                                            x:      d.dimensions.x
+                                            x: d.dimensions.x
                                                 + ((d.dimensions.width - w2) / 2),
-                                            y:      d.dimensions.y
+                                            y: d.dimensions.y
                                                 + ((d.dimensions.height - h2) / 2),
-                                            width:  w2,
+                                            width: w2,
                                             height: h2,
                                         };
                                         window.set_pos(center, None, None);
@@ -513,9 +506,9 @@ fn handle_socket_message(
                                 let w2 = d.dimensions.width / 2;
                                 let h2 = d.dimensions.height / 2;
                                 let center = Rect {
-                                    x:      d.dimensions.x + ((d.dimensions.width - w2) / 2),
-                                    y:      d.dimensions.y + ((d.dimensions.height - h2) / 2),
-                                    width:  w2,
+                                    x: d.dimensions.x + ((d.dimensions.width - w2) / 2),
+                                    y: d.dimensions.y + ((d.dimensions.height - h2) / 2),
+                                    width: w2,
                                     height: h2,
                                 };
                                 window.set_pos(center, None, None);
@@ -632,6 +625,7 @@ fn handle_socket_message(
                         }
                         SocketMessage::SetWorkspace(index) => {
                             if index != d.current_workspace_index {
+                                d.verify(&mut Vec::new());
                                 d.create_workspace(index);
                                 for window in d.get_current_workspace_mut().windows.iter_mut() {
                                     window.hide();
@@ -647,10 +641,12 @@ fn handle_socket_message(
                                     d.calculate_layout();
                                     d.apply_layout(None);
                                 }
+                                d.verify(&mut Vec::new());
                             }
                         }
                         SocketMessage::MoveWindowToWorkspace(index) => {
                             if index != d.current_workspace_index {
+                                d.verify(&mut Vec::new());
                                 d.create_workspace(index);
                                 let foreground_index = d.get_foreground_window_index();
                                 let mut window = d.get_current_workspace_mut().windows.remove(foreground_index);
@@ -659,6 +655,7 @@ fn handle_socket_message(
                                 window.hide();
                                 d.calculate_layout();
                                 d.apply_layout(None);
+                                d.verify(&mut Vec::new());
                             }
                         }
                     }
