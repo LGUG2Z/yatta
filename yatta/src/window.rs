@@ -246,6 +246,12 @@ impl Window {
         unsafe { IsIconic(self.hwnd).into() }
     }
 
+    pub fn hide(&mut self) {
+        unsafe {
+            ShowWindow(self.hwnd, SHOW_WINDOW_CMD::SW_HIDE);
+        }
+    }
+
     pub fn is_window(self) -> bool {
         unsafe { IsWindow(self.hwnd).into() }
     }

@@ -24,6 +24,8 @@ pub enum SocketMessage {
     FloatClass(String),
     FloatExe(String),
     FloatTitle(String),
+    SetWorkspace(usize),
+    MoveWindowToWorkspace(usize)
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Display, EnumString)]

@@ -35,6 +35,8 @@ enum SubCommand {
     FloatClass(FloatTarget),
     FloatExe(FloatTarget),
     FloatTitle(FloatTarget),
+    SetWorkspace(WorkspaceIndex),
+    MoveWindowToWorkspace(WorkspaceIndex)
 }
 
 #[derive(Clap)]
@@ -46,6 +48,11 @@ struct Resize {
 #[derive(Clap)]
 struct Gap {
     size: i32,
+}
+
+#[derive(Clap)]
+struct WorkspaceIndex {
+    index: usize
 }
 
 #[derive(Clap)]
@@ -181,6 +188,14 @@ fn main() {
         }
         SubCommand::FloatTitle(target) => {
             let bytes = SocketMessage::FloatTitle(target.id).as_bytes().unwrap();
+            send_message(&*bytes);
+        }
+        SubCommand::SetWorkspace(index) => {
+            let bytes = SocketMessage::SetWorkspace(index.index).as_bytes().unwrap();
+            send_message(&*bytes);
+        }
+        SubCommand::MoveWindowToWorkspace(index) => {
+            let bytes = SocketMessage::MoveWindowToWorkspace(index.index).as_bytes().unwrap();
             send_message(&*bytes);
         }
     }
