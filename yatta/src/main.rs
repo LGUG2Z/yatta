@@ -156,7 +156,7 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
 
     // Make sure we discard any windows that no longer exist
     for display in &mut desktop.displays {
-        display.get_current_workspace_mut().windows.retain(|x| x.is_window());
+        display.get_workspace_mut().windows.retain(|x| x.is_window());
     }
 
     let display_idx = desktop.get_active_display_idx();
@@ -169,8 +169,8 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
 
     match ev.event_type {
         WindowsEventType::MoveResizeStart => {
-            let idx = ev.window.index(&display.get_current_workspace_mut().windows);
-            let old_position = display.get_current_workspace_mut().layout_dimensions[idx.unwrap_or(0)];
+            let idx = ev.window.index(&display.get_workspace_mut().windows);
+            let old_position = display.get_workspace_mut().layout_dimensions[idx.unwrap_or(0)];
             ev.window.set_pos(
                 old_position,
                 Option::from(HWND_TOP),
@@ -178,8 +178,8 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
             )
         }
         WindowsEventType::MoveResizeEnd => {
-            let idx = ev.window.index(&display.get_current_workspace_mut().windows).unwrap_or(0);
-            let old_position = display.get_current_workspace_mut().layout_dimensions[idx];
+            let idx = ev.window.index(&display.get_workspace_mut().windows).unwrap_or(0);
+            let old_position = display.get_workspace_mut().layout_dimensions[idx];
             let new_position = ev.window.info().window_rect;
 
             let mut resize = Rect::zero();
@@ -199,29 +199,29 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
                     cursor_pos
                 };
 
-                for (i, window) in display.get_current_workspace().windows.iter().enumerate() {
+                for (i, window) in display.get_workspace().windows.iter().enumerate() {
                     if window.hwnd != ev.window.hwnd
-                        && display.get_current_workspace().layout_dimensions[i].contains_point((cursor_pos.x, cursor_pos.y))
+                        && display.get_workspace().layout_dimensions[i].contains_point((cursor_pos.x, cursor_pos.y))
                     {
                         target_window_idx = Option::from(i)
                     }
                 }
 
                 if let Some(new_idx) = target_window_idx {
-                    let window_resize = display.get_current_workspace_mut().windows[idx].resize.clone();
-                    let new_window_resize = display.get_current_workspace_mut().windows[new_idx].resize.clone();
+                    let window_resize = display.get_workspace_mut().windows[idx].resize.clone();
+                    let new_window_resize = display.get_workspace_mut().windows[new_idx].resize.clone();
 
                     {
-                        let window = display.get_current_workspace_mut().windows[idx].borrow_mut();
+                        let window = display.get_workspace_mut().windows[idx].borrow_mut();
                         window.resize = new_window_resize;
                     }
 
                     {
-                        let new_window = display.get_current_workspace_mut().windows[new_idx].borrow_mut();
+                        let new_window = display.get_workspace_mut().windows[new_idx].borrow_mut();
                         new_window.resize = window_resize;
                     }
 
-                    display.get_current_workspace_mut().windows.swap(idx, new_idx);
+                    display.get_workspace_mut().windows.swap(idx, new_idx);
                 }
             } else {
                 info!("handling resize event");
@@ -284,8 +284,8 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
             let mut all_windows = Vec::new();
             display.get_all_windows(&mut all_windows);
             if !all_windows.contains(&ev.window) {
-                if display.get_current_workspace_mut().windows.is_empty() {
-                    display.get_current_workspace_mut().windows.push(ev.window);
+                if display.get_workspace_mut().windows.is_empty() {
+                    display.get_workspace_mut().windows.push(ev.window);
                     display.calculate_layout();
                     display.apply_layout(None);
                 } else {
@@ -293,13 +293,13 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
                     // If we are inserting where there is a window that has resize adjustments, take
                     // over those resize adjustments and remove them from the window that is
                     // currently there
-                    if let Some(current_window) = display.get_current_workspace_mut().windows.get_mut(idx) {
+                    if let Some(current_window) = display.get_workspace_mut().windows.get_mut(idx) {
                         let resize = current_window.resize.clone();
                         current_window.resize = None;
                         ev.window.resize = resize;
                     }
 
-                    display.get_current_workspace_mut().windows.insert(idx, ev.window);
+                    display.get_workspace_mut().windows.insert(idx, ev.window);
                     display.calculate_layout();
                     display.apply_layout(None);
 
@@ -314,12 +314,12 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
                         }
                     }
                 }
-            } else if !display.get_current_workspace().windows.contains(&ev.window) {
+            } else if !display.get_workspace().windows.contains(&ev.window) {
                 ev.window.hide();
             }
         }
         WindowsEventType::Hide | WindowsEventType::Destroy => {
-            let idx = ev.window.index(&display.get_current_workspace_mut().windows);
+            let idx = ev.window.index(&display.get_workspace_mut().windows);
             let mut previous = idx.unwrap_or(0);
             let mut next = idx.unwrap_or(0);
             previous = if previous == 0 { 0 } else { previous - 1 };
@@ -328,17 +328,17 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
             // If we are removing a window that has resize adjustments, take over those
             // resize adjustments and add them from the window that is going to take the
             // space of the window being removed
-            let resize = if let Some(current_window) = display.get_current_workspace_mut().windows.get(idx.unwrap_or(0)) {
+            let resize = if let Some(current_window) = display.get_workspace_mut().windows.get(idx.unwrap_or(0)) {
                 current_window.resize.clone()
             } else {
                 None
             };
 
-            if let Some(next_window) = display.get_current_workspace_mut().windows.get_mut(next) {
+            if let Some(next_window) = display.get_workspace_mut().windows.get_mut(next) {
                 next_window.resize = resize;
             }
 
-            display.get_current_workspace_mut().windows.retain(|x| !ev.window.eq(x));
+            display.get_workspace_mut().windows.retain(|x| !ev.window.eq(x));
             display.calculate_layout();
             display.apply_layout(Option::from(previous));
             if let Some(title) = ev.window.title() {
@@ -348,7 +348,7 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
         WindowsEventType::FocusChange => {
             let mut contains = false;
 
-            for window in &display.get_current_workspace_mut().windows {
+            for window in &display.get_workspace_mut().windows {
                 if window.hwnd == ev.window.hwnd {
                     contains = true;
                 }
@@ -360,7 +360,7 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
                 display.calculate_layout();
                 display.apply_layout(None);
 
-                display.get_current_workspace_mut().foreground_window = ev.window;
+                display.get_workspace_mut().foreground_window = ev.window;
                 if let Some(title) = ev.window.title() {
                     if let Ok(path) = ev.window.exe_path() {
                         info!(
@@ -385,25 +385,25 @@ impl DirectionOperation {
     pub fn handle(self, display: &mut Display, idx: usize, new_idx: usize) {
         match self {
             DirectionOperation::Focus => {
-                if let Some(window) = display.get_current_workspace_mut().windows.get(new_idx) {
+                if let Some(window) = display.get_workspace_mut().windows.get(new_idx) {
                     window.set_foreground();
                 }
             }
             DirectionOperation::Move => {
-                let window_resize = display.get_current_workspace_mut().windows[idx].resize.clone();
-                let new_window_resize = display.get_current_workspace_mut().windows[new_idx].resize.clone();
+                let window_resize = display.get_workspace_mut().windows[idx].resize.clone();
+                let new_window_resize = display.get_workspace_mut().windows[new_idx].resize.clone();
 
                 {
-                    let window = display.get_current_workspace_mut().windows[idx].borrow_mut();
+                    let window = display.get_workspace_mut().windows[idx].borrow_mut();
                     window.resize = new_window_resize;
                 }
 
                 {
-                    let new_window = display.get_current_workspace_mut().windows[new_idx].borrow_mut();
+                    let new_window = display.get_workspace_mut().windows[new_idx].borrow_mut();
                     new_window.resize = window_resize;
                 }
 
-                display.get_current_workspace_mut().windows.swap(idx, new_idx);
+                display.get_workspace_mut().windows.swap(idx, new_idx);
                 display.calculate_layout();
                 display.apply_layout(Option::from(new_idx));
             }
@@ -448,23 +448,23 @@ fn handle_socket_message(
                         },
                         SocketMessage::Promote => {
                             let idx = d.get_foreground_window_index();
-                            let window = d.get_current_workspace_mut().windows.remove(idx);
-                            d.get_current_workspace_mut().windows.insert(0, window);
+                            let window = d.get_workspace_mut().windows.remove(idx);
+                            d.get_workspace_mut().windows.insert(0, window);
                             d.calculate_layout();
                             d.apply_layout(Option::from(0));
-                            let window = d.get_current_workspace().windows.get(0).unwrap();
-                            window.set_cursor_pos(d.get_current_workspace().layout_dimensions[0]);
+                            let window = d.get_workspace().windows.get(0).unwrap();
+                            window.set_cursor_pos(d.get_workspace().layout_dimensions[0]);
                         }
                         SocketMessage::TogglePause => {
                             desktop.paused = !desktop.paused;
                         }
-                        SocketMessage::ToggleMonocle => match d.get_current_workspace_mut().layout {
+                        SocketMessage::ToggleMonocle => match d.get_workspace_mut().layout {
                             Layout::Monocle => {
                                 let idx = d.get_foreground_window_index();
-                                if let Some(window) = d.get_current_workspace_mut().windows.get(idx) {
+                                if let Some(window) = d.get_workspace_mut().windows.get(idx) {
                                     let window = window.clone();
                                     let last_desktop = LAST_LAYOUT.lock().unwrap();
-                                    d.get_current_workspace_mut().layout = *last_desktop;
+                                    d.get_workspace_mut().layout = *last_desktop;
                                     d.calculate_layout();
                                     d.apply_layout(None);
 
@@ -488,18 +488,18 @@ fn handle_socket_message(
                             }
                             _ => {
                                 let mut last_desktop = LAST_LAYOUT.lock().unwrap();
-                                *last_desktop = d.get_current_workspace_mut().layout;
+                                *last_desktop = d.get_workspace_mut().layout;
 
-                                d.get_current_workspace_mut().layout = Layout::Monocle;
+                                d.get_workspace_mut().layout = Layout::Monocle;
                                 d.calculate_layout();
                                 d.apply_layout(None);
                             }
                         },
                         SocketMessage::ToggleFloat => {
                             let idx = d.get_foreground_window_index();
-                            let mut window = d.get_current_workspace_mut().windows.remove(idx);
+                            let mut window = d.get_workspace_mut().windows.remove(idx);
                             window.toggle_float();
-                            d.get_current_workspace_mut().windows.insert(idx, window);
+                            d.get_workspace_mut().windows.insert(idx, window);
                             d.calculate_layout();
                             d.apply_layout(None);
 
@@ -517,19 +517,19 @@ fn handle_socket_message(
                                 window.set_cursor_pos(center);
                             } else {
                                 // Make sure the mouse cursor goes back once we reenable tiling
-                                window.set_cursor_pos(d.get_current_workspace_mut().layout_dimensions[idx]);
+                                window.set_cursor_pos(d.get_workspace_mut().layout_dimensions[idx]);
                             }
                         }
                         SocketMessage::Retile => {
                             // Retiling should also rebalance the layout by resetting resizing
                             // adjustments
-                            for window in d.get_current_workspace_mut().windows.iter_mut() {
+                            for window in d.get_workspace_mut().windows.iter_mut() {
                                 window.resize = None
                             }
 
                             d.get_foreground_window();
                             d.calculate_layout();
-                            let idx = d.get_current_workspace_mut().foreground_window.index(&d.get_current_workspace_mut().windows);
+                            let idx = d.get_workspace_mut().foreground_window.index(&d.get_workspace_mut().windows);
                             d.apply_layout(idx);
                         }
                         SocketMessage::MoveWindow(direction) => match direction {
@@ -585,23 +585,23 @@ fn handle_socket_message(
                         }
                         SocketMessage::Layout(layout) => {
                             // Layouts should always start in a balanced state
-                            for window in d.get_current_workspace_mut().windows.iter_mut() {
+                            for window in d.get_workspace_mut().windows.iter_mut() {
                                 window.resize = None
                             }
 
-                            d.get_current_workspace_mut().layout = layout;
+                            d.get_workspace_mut().layout = layout;
                             d.calculate_layout();
                             d.apply_layout(None);
                         }
                         SocketMessage::CycleLayout(direction) => {
                             // Layouts should always start in a balanced state
-                            for window in d.get_current_workspace_mut().windows.iter_mut() {
+                            for window in d.get_workspace_mut().windows.iter_mut() {
                                 window.resize = None
                             }
 
                             match direction {
-                                CycleDirection::Previous => d.get_current_workspace_mut().layout.previous(),
-                                CycleDirection::Next => d.get_current_workspace_mut().layout.next(),
+                                CycleDirection::Previous => d.get_workspace_mut().layout.previous(),
+                                CycleDirection::Next => d.get_workspace_mut().layout.next(),
                             }
 
                             d.calculate_layout();
@@ -626,39 +626,11 @@ fn handle_socket_message(
                             }
                         }
                         SocketMessage::SetWorkspace(index) => {
-                            if index != d.current_workspace_index {
-                                d.verify(&mut Vec::new());
-                                d.create_workspace(index);
-                                for window in d.get_current_workspace_mut().windows.iter_mut() {
-                                    window.hide();
-                                }
-                                d.current_workspace_index = index;
-                                for window in d.get_current_workspace_mut().windows.iter_mut() {
-                                    window.restore();
-                                }
-
-                                let len_prev = d.get_current_workspace_mut().windows.len();
-                                d.get_current_workspace_mut().windows.retain(|x| x.is_window());
-                                if d.get_current_workspace_mut().windows.len() < len_prev || d.get_current_workspace_mut().needs_recalc {
-                                    d.calculate_layout();
-                                    d.apply_layout(None);
-                                }
-                                d.verify(&mut Vec::new());
-                            }
+                            d.set_workspace(index);
                         }
                         SocketMessage::MoveWindowToWorkspace(index) => {
-                            if index != d.current_workspace_index {
-                                d.verify(&mut Vec::new());
-                                d.create_workspace(index);
-                                let foreground_index = d.get_foreground_window_index();
-                                let mut window = d.get_current_workspace_mut().windows.remove(foreground_index);
-                                d.workspaces[index].windows.push(window);
-                                d.workspaces[index].needs_recalc = true;
-                                window.hide();
-                                d.calculate_layout();
-                                d.apply_layout(None);
-                                d.verify(&mut Vec::new());
-                            }
+                            let foreground_index = d.get_foreground_window_index();
+                            d.move_window_to_workspace(index, foreground_index);
                         }
                     }
                 }
