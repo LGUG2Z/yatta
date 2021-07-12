@@ -314,6 +314,8 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
                         }
                     }
                 }
+            } else if !display.get_current_workspace().windows.contains(&ev.window) {
+                ev.window.hide();
             }
         }
         WindowsEventType::Hide | WindowsEventType::Destroy => {
