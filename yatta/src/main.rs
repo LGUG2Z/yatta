@@ -632,6 +632,13 @@ fn handle_socket_message(
                             let foreground_index = d.get_foreground_window_index();
                             d.move_window_to_workspace(index, foreground_index);
                         }
+                        SocketMessage::Stop => {
+                            let windows = desktop.get_all_windows();
+                            for mut window in windows {
+                                window.restore();
+                            }
+                            std::process::exit(0);
+                        }
                     }
                 }
             }

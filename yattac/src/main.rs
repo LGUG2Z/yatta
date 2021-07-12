@@ -168,15 +168,8 @@ fn main() {
             }
         }
         SubCommand::Stop => {
-            let script = r#"Stop-Process -Name yatta"#;
-            match powershell_script::run(script, true) {
-                Ok(output) => {
-                    println!("{}", output);
-                }
-                Err(e) => {
-                    println!("Error: {}", e);
-                }
-            }
+            let bytes = SocketMessage::Stop.as_bytes().unwrap();
+            send_message(&*bytes);
         }
         SubCommand::FloatClass(target) => {
             let bytes = SocketMessage::FloatClass(target.id).as_bytes().unwrap();
