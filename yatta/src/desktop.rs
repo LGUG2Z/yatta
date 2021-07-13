@@ -48,7 +48,6 @@ pub struct Display {
 #[derive(Debug, Clone)]
 pub struct Workspace {
     pub windows:           Vec<Window>,
-    pub minimized_windows: Vec<Window>,
     pub layout:            Layout,
     pub layout_dimensions: Vec<Rect>,
     pub foreground_window: Window,
@@ -75,19 +74,12 @@ impl Default for Workspace {
             layout:            Layout::BSPV,
             layout_dimensions: vec![],
             windows:           vec![],
-            minimized_windows: vec![],
             needs_recalc:      false
         }
     }
 }
 
 impl Display {
-    pub fn follow_focus_with_mouse(&mut self, idx: usize) {
-        if let Some(window) = self.get_workspace().windows.get(idx) {
-            window.set_cursor_pos(self.get_workspace().layout_dimensions[idx]);
-        };
-    }
-
     pub fn get_workspace(&self) -> &Workspace {
         self.workspaces.get(self.workspace_index).unwrap()
     }
@@ -102,21 +94,49 @@ impl Display {
         }
     }
 
+    pub fn get_current_windows(&self) -> &Vec<Window> {
+        &self.get_workspace().windows
+    }
+
+    pub fn get_current_windows_mut(&mut self) -> &mut Vec<Window> {
+        &mut self.get_workspace_mut().windows
+    }
+
+    pub fn get_layout(&self) -> &Layout {
+        &self.get_workspace().layout
+    }
+
+    pub fn get_layout_mut(&mut self) -> &mut Layout {
+        &mut self.get_workspace_mut().layout
+    }
+
+    pub fn get_layout_dimensions(&self) -> &Vec<Rect> {
+        &self.get_workspace().layout_dimensions
+    }
+
+    pub fn get_layout_dimensions_mut(&mut self) -> &mut Vec<Rect> {
+        &mut self.get_workspace_mut().layout_dimensions
+    }
+
+    pub fn needs_recalc(&self) -> bool {
+        self.get_workspace().needs_recalc
+    }
+
     pub fn set_workspace(&mut self, index: usize) {
         if index != self.workspace_index {
             self.verify(&mut Vec::new());
             self.create_workspace(index);
-            for window in self.get_workspace_mut().windows.iter_mut() {
+            for window in self.get_current_windows_mut().iter_mut() {
                 window.hide();
             }
             self.workspace_index = index;
-            for window in self.get_workspace_mut().windows.iter_mut() {
+            for window in self.get_current_windows_mut().iter_mut() {
                 window.restore();
             }
 
-            let len_prev = self.get_workspace_mut().windows.len();
-            self.get_workspace_mut().windows.retain(|x| x.is_window());
-            if self.get_workspace_mut().windows.len() < len_prev || self.get_workspace_mut().needs_recalc {
+            let len_prev = self.get_current_windows().len();
+            self.get_current_windows_mut().retain(|x| x.is_window());
+            if self.get_current_windows().len() < len_prev || self.needs_recalc() {
                 self.calculate_layout();
                 self.apply_layout(None);
             }
@@ -128,7 +148,7 @@ impl Display {
         if index != self.workspace_index {
             self.verify(&mut Vec::new());
             self.create_workspace(index);
-            let mut window = self.get_workspace_mut().windows.remove(window_index);
+            let mut window = self.get_current_windows_mut().remove(window_index);
             self.workspaces[index].windows.push(window);
             self.workspaces[index].needs_recalc = true;
             window.hide();
@@ -138,14 +158,15 @@ impl Display {
         }
     }
 
-    pub fn get_foreground_window(&mut self) {
+    pub fn get_foreground_window(&mut self) -> Window {
         self.get_workspace_mut().foreground_window = Window::foreground();
+        self.get_workspace_mut().foreground_window
     }
 
     pub fn get_foreground_window_index(&mut self) -> usize {
         let mut idx = 0;
 
-        for (i, w) in self.get_workspace().windows.iter().enumerate() {
+        for (i, w) in self.get_current_windows().iter().enumerate() {
             if self.get_workspace().foreground_window.hwnd == w.hwnd {
                 idx = i;
                 break;
@@ -153,6 +174,12 @@ impl Display {
         }
 
         idx
+    }
+
+    pub fn follow_focus_with_mouse(&mut self, idx: usize) {
+        if let Some(window) = self.get_current_windows().get(idx) {
+            window.set_cursor_pos(self.get_layout_dimensions()[idx]);
+        };
     }
 
     pub fn verify(&mut self, windows: &mut Vec<Window>) -> bool {
@@ -192,32 +219,32 @@ impl Display {
         };
 
         let idx = self.get_foreground_window_index();
-        let can_resize = match self.get_workspace().layout {
+        let can_resize = match self.get_layout() {
             Layout::BSPV => match edge {
-                ResizeEdge::Left => self.get_workspace().windows.len() > 0 && idx != 0,
-                ResizeEdge::Top => self.get_workspace().windows.len() > 2 && idx != 0 && idx != 1,
+                ResizeEdge::Left => self.get_current_windows().len() > 0 && idx != 0,
+                ResizeEdge::Top => self.get_current_windows().len() > 2 && idx != 0 && idx != 1,
                 ResizeEdge::Right => {
-                    self.get_workspace().windows.len() > 1 && idx % 2 == 0 && idx != self.get_workspace().windows.len() - 1
+                    self.get_current_windows().len() > 1 && idx % 2 == 0 && idx != self.get_current_windows().len() - 1
                 }
                 ResizeEdge::Bottom => {
-                    self.get_workspace().windows.len() > 2 && idx != self.get_workspace().windows.len() - 1 && idx % 2 != 0
+                    self.get_current_windows().len() > 2 && idx != self.get_current_windows().len() - 1 && idx % 2 != 0
                 }
             },
             Layout::BSPH => match edge {
-                ResizeEdge::Left => self.get_workspace().windows.len() > 2 && idx != 0 && idx != 1,
-                ResizeEdge::Top => self.get_workspace().windows.len() > 1 && idx != 0,
+                ResizeEdge::Left => self.get_current_windows().len() > 2 && idx != 0 && idx != 1,
+                ResizeEdge::Top => self.get_current_windows().len() > 1 && idx != 0,
                 ResizeEdge::Right => {
-                    self.get_workspace().windows.len() > 2 && idx != self.get_workspace().windows.len() - 1 && idx % 2 != 0
+                    self.get_current_windows().len() > 2 && idx != self.get_current_windows().len() - 1 && idx % 2 != 0
                 }
                 ResizeEdge::Bottom => {
-                    self.get_workspace().windows.len() > 1 && idx % 2 == 0 && idx != self.get_workspace().windows.len() - 1
+                    self.get_current_windows().len() > 1 && idx % 2 == 0 && idx != self.get_current_windows().len() - 1
                 }
             },
             _ => false,
         };
 
         if can_resize {
-            let vertical = match self.get_workspace().layout {
+            let vertical = match self.get_layout() {
                 Layout::BSPV => 1,
                 Layout::BSPH => 0,
                 _ => unreachable!(),
@@ -227,18 +254,18 @@ impl Display {
             // ressize adjustments have been applied
             let layout = bsp(
                 0,
-                self.get_workspace().windows.len(),
+                self.get_current_windows().len(),
                 self.dimensions,
                 vertical,
                 self.gaps,
                 vec![],
             )[idx];
 
-            if self.get_workspace().windows[idx].resize.is_none() {
-                self.get_workspace_mut().windows[idx].resize = Option::from(Rect::zero())
+            if self.get_current_windows()[idx].resize.is_none() {
+                self.get_current_windows_mut()[idx].resize = Option::from(Rect::zero())
             }
 
-            if let Some(r) = self.get_workspace_mut().windows[idx].resize.borrow_mut() {
+            if let Some(r) = self.get_current_windows_mut()[idx].resize.borrow_mut() {
                 let max_divisor = 1.005;
                 match edge {
                     ResizeEdge::Left => match sizing {
@@ -322,15 +349,15 @@ impl Display {
 
     pub fn window_op_up(&mut self, op: DirectionOperation) {
         let idx = self.get_foreground_window_index();
-        let can_move = match self.get_workspace_mut().layout {
-            Layout::BSPV => self.get_workspace_mut().windows.len() > 2 && idx != 0 && idx != 1,
-            Layout::BSPH => self.get_workspace_mut().windows.len() > 1 && idx != 0,
+        let can_move = match self.get_layout() {
+            Layout::BSPV => self.get_current_windows().len() > 2 && idx != 0 && idx != 1,
+            Layout::BSPH => self.get_current_windows().len() > 1 && idx != 0,
             Layout::Columns | Layout::Monocle => false,
             Layout::Rows => idx != 0,
         };
 
         if can_move {
-            let new_idx = match self.get_workspace_mut().layout {
+            let new_idx = match self.get_layout() {
                 Layout::BSPV => {
                     if idx % 2 == 0 {
                         idx - 1
@@ -356,17 +383,17 @@ impl Display {
 
     pub fn window_op_down(&mut self, op: DirectionOperation) {
         let idx = self.get_foreground_window_index();
-        let len = self.get_workspace_mut().windows.len();
+        let len = self.get_current_windows().len();
 
-        let can_move = match self.get_workspace_mut().layout {
+        let can_move = match self.get_layout() {
             Layout::BSPV => len > 2 && idx != len - 1 && idx % 2 != 0,
-            Layout::BSPH => self.get_workspace_mut().windows.len() > 1 && idx % 2 == 0,
+            Layout::BSPH => self.get_current_windows().len() > 1 && idx % 2 == 0,
             Layout::Columns | Layout::Monocle => false,
-            Layout::Rows => idx != self.get_workspace_mut().windows.len() - 1,
+            Layout::Rows => idx != self.get_current_windows().len() - 1,
         };
 
         if can_move {
-            let new_idx = match self.get_workspace_mut().layout {
+            let new_idx = match self.get_layout() {
                 Layout::BSPV | Layout::BSPH | Layout::Rows => idx + 1,
                 Layout::Columns | Layout::Monocle => unreachable!(),
             };
@@ -377,15 +404,15 @@ impl Display {
 
     pub fn window_op_left(&mut self, op: DirectionOperation) {
         let idx = self.get_foreground_window_index();
-        let can_move = match self.get_workspace_mut().layout {
-            Layout::BSPV => self.get_workspace_mut().windows.len() > 1 && idx != 0,
-            Layout::BSPH => self.get_workspace_mut().windows.len() > 2 && idx != 0 && idx != 1,
+        let can_move = match self.get_layout() {
+            Layout::BSPV => self.get_current_windows().len() > 1 && idx != 0,
+            Layout::BSPH => self.get_current_windows().len() > 2 && idx != 0 && idx != 1,
             Layout::Columns => idx != 0,
             Layout::Rows | Layout::Monocle => false,
         };
 
         if can_move {
-            let new_idx = match self.get_workspace_mut().layout {
+            let new_idx = match self.get_layout() {
                 Layout::BSPV => {
                     if idx % 2 == 0 {
                         idx - 2
@@ -413,15 +440,15 @@ impl Display {
     pub fn window_op_right(&mut self, op: DirectionOperation) {
         let idx = self.get_foreground_window_index();
 
-        let can_move = match self.get_workspace_mut().layout {
-            Layout::BSPV => self.get_workspace_mut().windows.len() > 1 && idx % 2 == 0,
-            Layout::BSPH => self.get_workspace_mut().windows.len() > 2 && idx % 2 != 0 && idx != self.get_workspace_mut().windows.len() - 1,
-            Layout::Columns => idx != self.get_workspace_mut().windows.len() - 1,
+        let can_move = match self.get_layout() {
+            Layout::BSPV => self.get_current_windows().len() > 1 && idx % 2 == 0,
+            Layout::BSPH => self.get_current_windows().len() > 2 && idx % 2 != 0 && idx != self.get_current_windows().len() - 1,
+            Layout::Columns => idx != self.get_current_windows().len() - 1,
             Layout::Rows | Layout::Monocle => false,
         };
 
         if can_move {
-            let new_idx = match self.get_workspace_mut().layout {
+            let new_idx = match self.get_layout() {
                 Layout::BSPV | Layout::BSPH | Layout::Columns => idx + 1,
                 Layout::Rows | Layout::Monocle => unreachable!(),
             };
@@ -432,10 +459,10 @@ impl Display {
 
     pub fn window_op_next(&mut self, op: DirectionOperation) {
         let idx = self.get_foreground_window_index();
-        let can_move = self.get_workspace_mut().windows.len() > 1;
+        let can_move = self.get_current_windows().len() > 1;
 
         if can_move {
-            let new_idx = if idx == self.get_workspace_mut().windows.len() - 1 {
+            let new_idx = if idx == self.get_current_windows().len() - 1 {
                 0
             } else {
                 idx + 1
@@ -447,11 +474,11 @@ impl Display {
 
     pub fn window_op_previous(&mut self, op: DirectionOperation) {
         let idx = self.get_foreground_window_index();
-        let can_move = self.get_workspace_mut().windows.len() > 1;
+        let can_move = self.get_current_windows().len() > 1;
 
         if can_move {
             let new_idx = if idx == 0 {
-                self.get_workspace_mut().windows.len() - 1
+                self.get_current_windows().len() - 1
             } else {
                 idx - 1
             };
@@ -461,7 +488,7 @@ impl Display {
     }
 
     fn calculate_resize_adjustments(&self) -> Vec<Option<Rect>> {
-        let windows: Vec<&Window> = self.get_workspace().windows.iter().filter(|x| x.should_tile()).collect();
+        let windows: Vec<&Window> = self.get_current_windows().iter().filter(|x| x.should_tile()).collect();
         let resize_dimensions: Vec<Option<Rect>> = windows.iter().map(|x| x.resize).collect();
         let mut resize_adjustments = resize_dimensions.clone();
 
@@ -478,7 +505,7 @@ impl Display {
                         };
 
                         for n in range {
-                            let should_adjust = match self.get_workspace().layout {
+                            let should_adjust = match self.get_layout() {
                                 Layout::BSPV => n & 1 == 0,
                                 Layout::BSPH => n & 1 == 1,
                                 _ => unreachable!(),
@@ -513,7 +540,7 @@ impl Display {
                         };
 
                         for n in range {
-                            let should_adjust = match self.get_workspace().layout {
+                            let should_adjust = match self.get_layout() {
                                 Layout::BSPV => n & 1 == 1,
                                 Layout::BSPH => n & 1 == 0,
                                 _ => unreachable!(),
@@ -545,20 +572,20 @@ impl Display {
     }
 
     pub fn calculate_layout(&mut self) {
-        let len = self.get_workspace_mut().windows.iter().filter(|x| x.should_tile()).count();
+        let len = self.get_current_windows().iter().filter(|x| x.should_tile()).count();
 
-        match self.get_workspace_mut().layout {
+        match self.get_layout() {
             Layout::Monocle => {
-                self.get_workspace_mut().layout_dimensions = bsp(0, 1, self.dimensions, 1, self.gaps, vec![]);
+                *self.get_layout_dimensions_mut() = bsp(0, 1, self.dimensions, 1, self.gaps, vec![]);
             }
             Layout::BSPV => {
                 let resize_adjustments = self.calculate_resize_adjustments();
-                self.get_workspace_mut().layout_dimensions =
+                *self.get_layout_dimensions_mut() =
                     bsp(0, len, self.dimensions, 1, self.gaps, resize_adjustments);
             }
             Layout::BSPH => {
                 let resize_adjustments = self.calculate_resize_adjustments();
-                self.get_workspace_mut().layout_dimensions =
+                *self.get_layout_dimensions_mut() =
                     bsp(0, len, self.dimensions, 0, self.gaps, resize_adjustments);
             }
             Layout::Columns => {
@@ -567,7 +594,7 @@ impl Display {
 
                 let mut x = 0;
                 let mut layouts: Vec<Rect> = vec![];
-                for _ in &self.get_workspace().windows {
+                for _ in self.get_current_windows() {
                     layouts.push(Rect {
                         x:      (self.dimensions.x + x) + self.gaps,
                         y:      (self.dimensions.y) + self.gaps,
@@ -576,7 +603,7 @@ impl Display {
                     });
                     x += width;
                 }
-                self.get_workspace_mut().layout_dimensions = layouts
+                *self.get_layout_dimensions_mut() = layouts
             }
             Layout::Rows => {
                 let height_f = self.dimensions.height as f32 / len as f32;
@@ -584,7 +611,7 @@ impl Display {
 
                 let mut y = 0;
                 let mut layouts: Vec<Rect> = vec![];
-                for _ in &self.get_workspace().windows {
+                for _ in self.get_current_windows() {
                     layouts.push(Rect {
                         x:      self.dimensions.x + self.gaps,
                         y:      self.dimensions.y + y + self.gaps,
@@ -593,16 +620,15 @@ impl Display {
                     });
                     y += height;
                 }
-                self.get_workspace_mut().layout_dimensions = layouts
+                *self.get_layout_dimensions_mut() = layouts
             }
         }
     }
 
     pub fn apply_layout(&mut self, new_focus: Option<usize>) {
-        if let Layout::Monocle = self.get_workspace_mut().layout {
-            self.get_foreground_window();
-            self.get_workspace().foreground_window.set_pos(
-                self.get_workspace().layout_dimensions[0],
+        if let Layout::Monocle = self.get_layout() {
+            self.get_foreground_window().set_pos(
+                self.get_layout_dimensions()[0],
                 Option::from(HWND_NOTOPMOST),
                 None,
             );
@@ -611,23 +637,23 @@ impl Display {
         }
 
         let mut skipped = 0;
-        for (i, w) in self.get_workspace().windows.iter().enumerate() {
+        for (i, w) in self.get_current_windows().iter().enumerate() {
             if w.should_tile() {
                 if let Some(new_idx) = new_focus {
                     // Make sure this is focused
                     if i == new_idx {
                         w.set_pos(
-                            self.get_workspace().layout_dimensions[new_idx],
+                            self.get_layout_dimensions()[new_idx],
                             None,
                             Option::from(
                                 SET_WINDOW_POS_FLAGS::SWP_NOMOVE | SET_WINDOW_POS_FLAGS::SWP_NOSIZE,
                             ),
                         );
                     } else {
-                        w.set_pos(self.get_workspace().layout_dimensions[i - skipped], None, None)
+                        w.set_pos(self.get_layout_dimensions()[i - skipped], None, None)
                     }
                 } else {
-                    w.set_pos(self.get_workspace().layout_dimensions[i - skipped], None, None)
+                    w.set_pos(self.get_layout_dimensions()[i - skipped], None, None)
                 }
             } else {
                 skipped += 1
@@ -699,9 +725,9 @@ impl Desktop {
         }
 
         for display in &mut self.displays {
-            display.get_workspace_mut().windows.clear();
+            display.get_current_windows_mut().clear();
 
-            display.get_workspace_mut().windows = windows
+            *display.get_current_windows_mut() = windows
                 .iter()
                 .filter(|x| x.should_tile())
                 .filter(|x| x.hmonitor == display.hmonitor)
@@ -732,7 +758,7 @@ impl Desktop {
             };
 
             let target = self.displays[to].borrow_mut();
-            if let Some(window) = target.get_workspace_mut().windows.first() {
+            if let Some(window) = target.get_current_windows().first() {
                 window.set_foreground();
                 target.follow_focus_with_mouse(0)
             } else {
@@ -750,7 +776,7 @@ impl Desktop {
             let to = to - 1;
 
             let target = self.displays[to].borrow_mut();
-            if let Some(window) = target.get_workspace_mut().windows.first() {
+            if let Some(window) = target.get_current_windows().first() {
                 window.set_foreground();
                 target.follow_focus_with_mouse(0)
             } else {
@@ -789,14 +815,14 @@ impl Desktop {
 
             let window = {
                 let origin = self.displays[from].borrow_mut();
-                let window = origin.get_workspace_mut().windows.remove(window_idx);
+                let window = origin.get_current_windows_mut().remove(window_idx);
                 origin.calculate_layout();
                 origin.apply_layout(None);
                 window
             };
 
             let target = self.displays[to].borrow_mut();
-            target.get_workspace_mut().windows.insert(0, window);
+            target.get_current_windows_mut().insert(0, window);
             target.calculate_layout();
             target.apply_layout(Option::from(0));
         }
@@ -810,14 +836,14 @@ impl Desktop {
 
             let window = {
                 let origin = self.displays[from].borrow_mut();
-                let window = origin.get_workspace_mut().windows.remove(window_idx);
+                let window = origin.get_current_windows_mut().remove(window_idx);
                 origin.calculate_layout();
                 origin.apply_layout(None);
                 window
             };
 
             let target = self.displays[to].borrow_mut();
-            target.get_workspace_mut().windows.insert(0, window);
+            target.get_current_windows_mut().insert(0, window);
             target.calculate_layout();
             target.apply_layout(Option::from(0));
         }
@@ -857,7 +883,7 @@ impl Default for Desktop {
 
         desktop.get_visible_windows();
         for display in &mut desktop.displays {
-            display.get_foreground_window()
+            display.get_foreground_window();
         }
 
         desktop.calculate_layouts();
