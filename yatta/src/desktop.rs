@@ -52,14 +52,12 @@ pub struct Workspace {
     pub layout_dimensions: Vec<Rect>,
     pub foreground_window: Window,
     pub needs_recalc:      bool,
-    pub foreground_window_title: Option<String>,
 }
 
 impl Default for Workspace {
     fn default() -> Self {
         Workspace {
             foreground_window:       Window::default(),
-            foreground_window_title: None,
             layout:                  Layout::BSPV,
             layout_dimensions:       vec![],
             windows:                 vec![],
@@ -107,14 +105,6 @@ impl Display {
         &mut self.get_workspace_mut().layout_dimensions
     }
 
-    pub fn get_foreground_window_title(&self) -> &Option<String> {
-        &self.get_workspace().foreground_window_title
-    }
-
-    pub fn set_foreground_window_title(&mut self, title: Option<String>) {
-        self.get_workspace_mut().foreground_window_title = title;
-    }
-
     pub fn needs_recalc(&self) -> bool {
         self.get_workspace().needs_recalc
     }
@@ -122,8 +112,6 @@ impl Display {
     pub fn set_workspace(&mut self, index: usize) {
         if index != self.workspace_index {
             self.create_workspace(index);
-            let foreground_window_title = self.get_foreground_window().title();
-            self.set_foreground_window_title(foreground_window_title);
             for window in self.get_current_windows_mut().iter_mut() {
                 window.hide();
             }
@@ -138,8 +126,7 @@ impl Display {
                 self.calculate_layout();
                 self.apply_layout(None);
             }
-            let foreground_window_title = self.get_foreground_window_title();
-            if let Some(window) = self.get_current_windows().iter().find(|window| window.title() == *foreground_window_title) {
+            if let Some(window) = self.get_current_windows().first() {
                 window.set_foreground();
             }
         }
