@@ -54,19 +54,6 @@ pub struct Workspace {
     pub needs_recalc:      bool
 }
 
-impl Workspace {
-    pub fn verify(&mut self, windows: &mut Vec<Window>) -> bool {
-        let mut changed = false;
-        self.windows.retain(|window| {
-            let result = !windows.contains(window) && window.is_window();
-            if !result { changed = true; }
-            windows.push(*window);
-            result
-        });
-        changed
-    }
-}
-
 impl Default for Workspace {
     fn default() -> Self {
         Workspace {
@@ -124,7 +111,6 @@ impl Display {
 
     pub fn set_workspace(&mut self, index: usize) {
         if index != self.workspace_index {
-            self.verify(&mut Vec::new());
             self.create_workspace(index);
             for window in self.get_current_windows_mut().iter_mut() {
                 window.hide();
@@ -140,13 +126,11 @@ impl Display {
                 self.calculate_layout();
                 self.apply_layout(None);
             }
-            self.verify(&mut Vec::new());
         }
     }
 
     pub fn move_window_to_workspace(&mut self, index: usize, window_index: usize) {
         if index != self.workspace_index {
-            self.verify(&mut Vec::new());
             self.create_workspace(index);
             let mut window = self.get_current_windows_mut().remove(window_index);
             self.workspaces[index].windows.push(window);
@@ -154,7 +138,6 @@ impl Display {
             window.hide();
             self.calculate_layout();
             self.apply_layout(None);
-            self.verify(&mut Vec::new());
         }
     }
 
@@ -180,20 +163,6 @@ impl Display {
         if let Some(window) = self.get_current_windows().get(idx) {
             window.set_cursor_pos(self.get_layout_dimensions()[idx]);
         };
-    }
-
-    pub fn verify(&mut self, windows: &mut Vec<Window>) -> bool {
-        let mut changed = false;
-        for workspace in &mut self.workspaces {
-            if workspace.verify(windows) {
-                changed = true;
-            }
-        }
-        if changed {
-            self.calculate_layout();
-            self.apply_layout(None);
-        }
-        changed
     }
 
     pub fn get_all_windows(&self, windows: &mut Vec<Window>) {
@@ -680,17 +649,6 @@ impl Desktop {
         }
 
         0
-    }
-
-    pub fn verify(&mut self) -> bool {
-        let mut windows: Vec<Window> = Vec::new();
-        let mut changed = false;
-        for display in &mut self.displays {
-            if display.verify(&mut windows) {
-                changed = true;
-            }
-        }
-        changed
     }
 
     pub fn get_all_windows(&self) -> Vec<Window> {
