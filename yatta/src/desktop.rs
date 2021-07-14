@@ -139,10 +139,8 @@ impl Display {
                 self.apply_layout(None);
             }
             let foreground_window_title = self.get_foreground_window_title();
-            println!("Foreground title: {:?}", foreground_window_title);
             if let Some(window) = self.get_current_windows().iter().find(|window| window.title() == *foreground_window_title) {
                 window.set_foreground();
-                println!("Set foreground");
             }
         }
     }
