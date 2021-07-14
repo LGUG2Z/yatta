@@ -157,6 +157,24 @@ impl Display {
         }
     }
 
+    pub fn move_window_to_workspace_and_follow(&mut self, index: usize, window_index: usize) {
+        if index != self.workspace_index {
+            self.create_workspace(index);
+            let mut window = self.get_current_windows_mut().remove(window_index);
+            for window in self.get_current_windows_mut().iter_mut() {
+                window.hide();
+            }
+            self.workspace_index = index;
+            for window in self.get_current_windows_mut().iter_mut() {
+                window.restore();
+            }
+            let new_window_index = self.get_current_windows().len();
+            self.get_current_windows_mut().push(window);
+            self.calculate_layout();
+            self.apply_layout(Some(new_window_index));
+        }
+    }
+
     pub fn get_foreground_window(&mut self) -> Window {
         self.get_workspace_mut().foreground_window = Window::foreground();
         self.get_workspace_mut().foreground_window

@@ -26,6 +26,7 @@ pub enum SocketMessage {
     FloatTitle(String),
     SetWorkspace(usize),
     MoveWindowToWorkspace(usize),
+    MoveWindowToWorkspaceAndFollow(usize),
     Stop
 }
 
