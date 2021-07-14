@@ -1,4 +1,3 @@
-#![windows_subsystem = "windows"]
 use std::io::Write;
 
 use clap::Clap;
