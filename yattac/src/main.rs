@@ -37,7 +37,7 @@ enum SubCommand {
     FloatTitle(FloatTarget),
     SetWorkspace(WorkspaceIndex),
     MoveWindowToWorkspace(WorkspaceIndex),
-    MoveWindowToWorkspaceAndFollow(WorkspaceIndex)
+    MoveWindowToWorkspaceAndFollow(WorkspaceIndex),
 }
 
 #[derive(Clap)]
@@ -53,7 +53,7 @@ struct Gap {
 
 #[derive(Clap)]
 struct WorkspaceIndex {
-    index: usize
+    index: usize,
 }
 
 #[derive(Clap)]
@@ -189,11 +189,15 @@ fn main() {
             send_message(&*bytes);
         }
         SubCommand::MoveWindowToWorkspace(index) => {
-            let bytes = SocketMessage::MoveWindowToWorkspace(index.index).as_bytes().unwrap();
+            let bytes = SocketMessage::MoveWindowToWorkspace(index.index)
+                .as_bytes()
+                .unwrap();
             send_message(&*bytes);
         }
         SubCommand::MoveWindowToWorkspaceAndFollow(index) => {
-            let bytes = SocketMessage::MoveWindowToWorkspaceAndFollow(index.index).as_bytes().unwrap();
+            let bytes = SocketMessage::MoveWindowToWorkspaceAndFollow(index.index)
+                .as_bytes()
+                .unwrap();
             send_message(&*bytes);
         }
     }

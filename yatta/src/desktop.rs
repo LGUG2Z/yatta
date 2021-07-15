@@ -57,11 +57,11 @@ pub struct Workspace {
 impl Default for Workspace {
     fn default() -> Self {
         Workspace {
-            foreground_window:       Window::default(),
-            layout:                  Layout::BSPV,
-            layout_dimensions:       vec![],
-            windows:                 vec![],
-            needs_recalc:            false
+            foreground_window: Window::default(),
+            layout:            Layout::BSPV,
+            layout_dimensions: vec![],
+            windows:           vec![],
+            needs_recalc:      false,
         }
     }
 }
@@ -147,7 +147,7 @@ impl Display {
     pub fn move_window_to_workspace_and_follow(&mut self, index: usize, window_index: usize) {
         if index != self.workspace_index {
             self.create_workspace(index);
-            let mut window = self.get_current_windows_mut().remove(window_index);
+            let window = self.get_current_windows_mut().remove(window_index);
             for window in self.get_current_windows_mut().iter_mut() {
                 window.hide();
             }
@@ -211,23 +211,31 @@ impl Display {
         let idx = self.get_foreground_window_index();
         let can_resize = match self.get_layout() {
             Layout::BSPV => match edge {
-                ResizeEdge::Left => self.get_current_windows().len() > 0 && idx != 0,
+                ResizeEdge::Left => !self.get_current_windows().is_empty() && idx != 0,
                 ResizeEdge::Top => self.get_current_windows().len() > 2 && idx != 0 && idx != 1,
                 ResizeEdge::Right => {
-                    self.get_current_windows().len() > 1 && idx % 2 == 0 && idx != self.get_current_windows().len() - 1
+                    self.get_current_windows().len() > 1
+                        && idx % 2 == 0
+                        && idx != self.get_current_windows().len() - 1
                 }
                 ResizeEdge::Bottom => {
-                    self.get_current_windows().len() > 2 && idx != self.get_current_windows().len() - 1 && idx % 2 != 0
+                    self.get_current_windows().len() > 2
+                        && idx != self.get_current_windows().len() - 1
+                        && idx % 2 != 0
                 }
             },
             Layout::BSPH => match edge {
                 ResizeEdge::Left => self.get_current_windows().len() > 2 && idx != 0 && idx != 1,
                 ResizeEdge::Top => self.get_current_windows().len() > 1 && idx != 0,
                 ResizeEdge::Right => {
-                    self.get_current_windows().len() > 2 && idx != self.get_current_windows().len() - 1 && idx % 2 != 0
+                    self.get_current_windows().len() > 2
+                        && idx != self.get_current_windows().len() - 1
+                        && idx % 2 != 0
                 }
                 ResizeEdge::Bottom => {
-                    self.get_current_windows().len() > 1 && idx % 2 == 0 && idx != self.get_current_windows().len() - 1
+                    self.get_current_windows().len() > 1
+                        && idx % 2 == 0
+                        && idx != self.get_current_windows().len() - 1
                 }
             },
             _ => false,
@@ -432,7 +440,11 @@ impl Display {
 
         let can_move = match self.get_layout() {
             Layout::BSPV => self.get_current_windows().len() > 1 && idx % 2 == 0,
-            Layout::BSPH => self.get_current_windows().len() > 2 && idx % 2 != 0 && idx != self.get_current_windows().len() - 1,
+            Layout::BSPH => {
+                self.get_current_windows().len() > 2
+                    && idx % 2 != 0
+                    && idx != self.get_current_windows().len() - 1
+            }
             Layout::Columns => idx != self.get_current_windows().len() - 1,
             Layout::Rows | Layout::Monocle => false,
         };
@@ -478,7 +490,11 @@ impl Display {
     }
 
     fn calculate_resize_adjustments(&self) -> Vec<Option<Rect>> {
-        let windows: Vec<&Window> = self.get_current_windows().iter().filter(|x| x.should_tile()).collect();
+        let windows: Vec<&Window> = self
+            .get_current_windows()
+            .iter()
+            .filter(|x| x.should_tile())
+            .collect();
         let resize_dimensions: Vec<Option<Rect>> = windows.iter().map(|x| x.resize).collect();
         let mut resize_adjustments = resize_dimensions.clone();
 
@@ -562,11 +578,16 @@ impl Display {
     }
 
     pub fn calculate_layout(&mut self) {
-        let len = self.get_current_windows().iter().filter(|x| x.should_tile()).count();
+        let len = self
+            .get_current_windows()
+            .iter()
+            .filter(|x| x.should_tile())
+            .count();
 
         match self.get_layout() {
             Layout::Monocle => {
-                *self.get_layout_dimensions_mut() = bsp(0, 1, self.dimensions, 1, self.gaps, vec![]);
+                *self.get_layout_dimensions_mut() =
+                    bsp(0, 1, self.dimensions, 1, self.gaps, vec![]);
             }
             Layout::BSPV => {
                 let resize_adjustments = self.calculate_resize_adjustments();
@@ -915,11 +936,11 @@ extern "system" fn enum_display_monitor(
 
     displays.push(Display {
         workspace_index: 0,
-        dimensions:        rect,
-        gaps:              5,
-        resize_step:       50,
-        hmonitor:          monitor,
-        workspaces: vec![Workspace::default()]
+        dimensions:      rect,
+        gaps:            5,
+        resize_step:     50,
+        hmonitor:        monitor,
+        workspaces:      vec![Workspace::default()],
     });
 
     true.into()
@@ -933,18 +954,14 @@ fn bsp(
     gaps: i32,
     resize_dimensions: Vec<Option<Rect>>,
 ) -> Vec<Rect> {
-    let mut a = area.clone();
+    let mut a = area;
 
-    let resized = if let Some(opt) = resize_dimensions.get(i) {
-        if let Some(r) = opt {
-            a.x += r.x;
-            a.y += r.y;
-            a.width += r.width;
-            a.height += r.height;
-            a
-        } else {
-            area
-        }
+    let resized = if let Some(Some(r)) = resize_dimensions.get(i) {
+        a.x += r.x;
+        a.y += r.y;
+        a.width += r.width;
+        a.height += r.height;
+        a
     } else {
         area
     };

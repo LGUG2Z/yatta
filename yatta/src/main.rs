@@ -1,6 +1,5 @@
 extern crate flexi_logger;
-#[macro_use]
-extern crate num_derive;
+#[macro_use] extern crate num_derive;
 extern crate num_traits;
 
 use core::mem;
@@ -9,12 +8,13 @@ use std::{
     collections::HashMap,
     io::{BufRead, BufReader, ErrorKind},
     process::exit,
+    str::FromStr,
     sync::{Arc, Mutex},
     thread,
 };
 
 use anyhow::{Context, Result};
-use crossbeam_channel::{Receiver, select, Sender, unbounded};
+use crossbeam_channel::{select, unbounded, Receiver, Sender};
 use flexi_logger::{colored_detailed_format, Duplicate};
 use lazy_static::lazy_static;
 use log::{error, info};
@@ -87,7 +87,7 @@ fn main() -> Result<()> {
     let listener = Arc::new(Mutex::new(WindowsEventListener::default()));
     listener.lock().unwrap().start();
 
-    let mut socket = home.clone();
+    let mut socket = home;
     socket.push("yatta.sock");
     let socket = socket.as_path();
 
@@ -170,7 +170,7 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
 
     match ev.event_type {
         WindowsEventType::MoveResizeStart => {
-            let idx = ev.window.index(&display.get_current_windows());
+            let idx = ev.window.index(display.get_current_windows());
             let old_position = display.get_layout_dimensions()[idx.unwrap_or(0)];
             ev.window.set_pos(
                 old_position,
@@ -179,7 +179,7 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
             )
         }
         WindowsEventType::MoveResizeEnd => {
-            let idx = ev.window.index(&display.get_current_windows()).unwrap_or(0);
+            let idx = ev.window.index(display.get_current_windows()).unwrap_or(0);
             let old_position = display.get_layout_dimensions()[idx];
             let new_position = ev.window.info().window_rect;
 
@@ -202,15 +202,16 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
 
                 for (i, window) in display.get_workspace().windows.iter().enumerate() {
                     if window.hwnd != ev.window.hwnd
-                        && display.get_layout_dimensions()[i].contains_point((cursor_pos.x, cursor_pos.y))
+                        && display.get_layout_dimensions()[i]
+                            .contains_point((cursor_pos.x, cursor_pos.y))
                     {
                         target_window_idx = Option::from(i)
                     }
                 }
 
                 if let Some(new_idx) = target_window_idx {
-                    let window_resize = display.get_current_windows()[idx].resize.clone();
-                    let new_window_resize = display.get_current_windows()[new_idx].resize.clone();
+                    let window_resize = display.get_current_windows()[idx].resize;
+                    let new_window_resize = display.get_current_windows()[new_idx].resize;
 
                     {
                         let window = display.get_current_windows_mut()[idx].borrow_mut();
@@ -295,7 +296,7 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
                     // over those resize adjustments and remove them from the window that is
                     // currently there
                     if let Some(current_window) = display.get_current_windows_mut().get_mut(idx) {
-                        let resize = current_window.resize.clone();
+                        let resize = current_window.resize;
                         current_window.resize = None;
                         ev.window.resize = resize;
                     }
@@ -320,7 +321,7 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
             }
         }
         WindowsEventType::Hide | WindowsEventType::Destroy => {
-            let idx = ev.window.index(&display.get_current_windows());
+            let idx = ev.window.index(display.get_current_windows());
             let mut previous = idx.unwrap_or(0);
             let mut next = idx.unwrap_or(0);
             previous = if previous == 0 { 0 } else { previous - 1 };
@@ -329,17 +330,20 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
             // If we are removing a window that has resize adjustments, take over those
             // resize adjustments and add them from the window that is going to take the
             // space of the window being removed
-            let resize = if let Some(current_window) = display.get_current_windows().get(idx.unwrap_or(0)) {
-                current_window.resize.clone()
-            } else {
-                None
-            };
+            let resize =
+                if let Some(current_window) = display.get_current_windows().get(idx.unwrap_or(0)) {
+                    current_window.resize
+                } else {
+                    None
+                };
 
             if let Some(next_window) = display.get_current_windows_mut().get_mut(next) {
                 next_window.resize = resize;
             }
 
-            display.get_current_windows_mut().retain(|x| !ev.window.eq(x));
+            display
+                .get_current_windows_mut()
+                .retain(|x| !ev.window.eq(x));
             display.calculate_layout();
             display.apply_layout(Option::from(previous));
             if let Some(title) = ev.window.title() {
@@ -391,8 +395,8 @@ impl DirectionOperation {
                 }
             }
             DirectionOperation::Move => {
-                let window_resize = display.get_current_windows()[idx].resize.clone();
-                let new_window_resize = display.get_current_windows()[new_idx].resize.clone();
+                let window_resize = display.get_current_windows()[idx].resize;
+                let new_window_resize = display.get_current_windows()[new_idx].resize;
 
                 {
                     let window = display.get_current_windows_mut()[idx].borrow_mut();
@@ -463,7 +467,7 @@ fn handle_socket_message(
                             Layout::Monocle => {
                                 let idx = d.get_foreground_window_index();
                                 if let Some(window) = d.get_current_windows().get(idx) {
-                                    let window = window.clone();
+                                    let window = *window;
                                     let last_desktop = LAST_LAYOUT.lock().unwrap();
                                     *d.get_layout_mut() = *last_desktop;
                                     d.calculate_layout();
@@ -475,11 +479,11 @@ fn handle_socket_message(
                                         let w2 = d.dimensions.width / 2;
                                         let h2 = d.dimensions.height / 2;
                                         let center = Rect {
-                                            x: d.dimensions.x
+                                            x:      d.dimensions.x
                                                 + ((d.dimensions.width - w2) / 2),
-                                            y: d.dimensions.y
+                                            y:      d.dimensions.y
                                                 + ((d.dimensions.height - h2) / 2),
-                                            width: w2,
+                                            width:  w2,
                                             height: h2,
                                         };
                                         window.set_pos(center, None, None);
@@ -509,9 +513,9 @@ fn handle_socket_message(
                                 let w2 = d.dimensions.width / 2;
                                 let h2 = d.dimensions.height / 2;
                                 let center = Rect {
-                                    x: d.dimensions.x + ((d.dimensions.width - w2) / 2),
-                                    y: d.dimensions.y + ((d.dimensions.height - h2) / 2),
-                                    width: w2,
+                                    x:      d.dimensions.x + ((d.dimensions.width - w2) / 2),
+                                    y:      d.dimensions.y + ((d.dimensions.height - h2) / 2),
+                                    width:  w2,
                                     height: h2,
                                 };
                                 window.set_pos(center, None, None);
@@ -530,7 +534,10 @@ fn handle_socket_message(
 
                             d.get_foreground_window();
                             d.calculate_layout();
-                            let idx = d.get_workspace_mut().foreground_window.index(&d.get_current_windows());
+                            let idx = d
+                                .get_workspace_mut()
+                                .foreground_window
+                                .index(d.get_current_windows());
                             d.apply_layout(idx);
                         }
                         SocketMessage::MoveWindow(direction) => match direction {

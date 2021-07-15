@@ -28,7 +28,7 @@ pub fn start_with_sleep(sleep: u64, cb: impl Fn(Option<MSG>) -> bool) {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
 
-                value = Some(msg.clone());
+                value = Some(msg);
             }
         }
 
