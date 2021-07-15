@@ -49,6 +49,7 @@ lazy_static! {
     static ref DESKTOP_EXES: Arc<Mutex<HashMap<String, usize>>> =
         Arc::new(Mutex::new(HashMap::new()));
     static ref LAST_LAYOUT: Arc<Mutex<Layout>> = Arc::new(Mutex::new(Layout::BSPV));
+    static ref LAYERED_EXE_WHITELIST: Vec<String> = vec!["steam.exe".to_string()];
 }
 
 #[derive(Clone, Debug)]

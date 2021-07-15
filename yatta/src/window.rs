@@ -41,7 +41,14 @@ use bindings::Windows::Win32::{
     },
 };
 
-use crate::{rect::Rect, windows_event::WindowsEventType, FLOAT_CLASSES, FLOAT_EXES, FLOAT_TITLES};
+use crate::{
+    rect::Rect,
+    windows_event::WindowsEventType,
+    FLOAT_CLASSES,
+    FLOAT_EXES,
+    FLOAT_TITLES,
+    LAYERED_EXE_WHITELIST,
+};
 
 bitflags! {
     #[derive(Default)]
@@ -282,8 +289,12 @@ impl Window {
     }
 
     pub fn should_manage(&self, event: Option<WindowsEventType>) -> bool {
+        match self.title() {
+            None => return false,
+            Some(_) => {}
+        }
+
         let is_cloaked = self.is_cloaked();
-        let has_title = self.title().is_some();
         let styles = self.get_style();
         let extended_styles = self.get_ex_style();
 
@@ -294,18 +305,26 @@ impl Window {
             }
         }
 
-        if has_title && if allow_cloaked { true } else { !is_cloaked } {
-            match (styles, extended_styles) {
-                (Ok(style), Ok(ex_style)) => {
-                    if style.contains(GwlStyle::CAPTION)
-                        && ex_style.contains(GwlExStyle::WINDOWEDGE)
-                        && !ex_style.contains(GwlExStyle::DLGMODALFRAME)
-                        // Get a lot of dupe events coming through that make the redrawing go crazy 
-                        // on FocusChange events if I don't filter out this one 
-                        && !ex_style.contains(GwlExStyle::LAYERED)
-                    {
-                        if let Some(title) = self.title() {
-                            if let Ok(path) = self.exe_path() {
+        match (allow_cloaked, is_cloaked) {
+            // if allowing cloaked windows, we don't need to check the cloaked status
+            (true, _) |
+            // if not allowing cloaked windows, we need to ensure the window is not cloaked
+            (false, false) => {
+                match (styles, extended_styles) {
+                    (Ok(style), Ok(ex_style)) => {
+                        if let (Some(title), Ok(path)) = (self.title(), self.exe_path()) {
+                            let exe_name = exe_name_from_path(&path);
+                            let allow_layered = LAYERED_EXE_WHITELIST.contains(&exe_name);
+
+                            if style.contains(GwlStyle::CAPTION)
+                                && ex_style.contains(GwlExStyle::WINDOWEDGE)
+                                && !ex_style.contains(GwlExStyle::DLGMODALFRAME)
+                                // Get a lot of dupe events coming through that make the redrawing go crazy
+                                // on FocusChange events if I don't filter out this one. But, if we are
+                                // allowing a specific layered window on the whitelist (like Steam), it should
+                                // pass this check
+                                && (allow_layered || !ex_style.contains(GwlExStyle::LAYERED))
+                            {
                                 debug!(
                                     "managing {} - {} (styles: {:?}) (extended styles: {:?})",
                                     exe_name_from_path(&path),
@@ -313,14 +332,10 @@ impl Window {
                                     style,
                                     ex_style
                                 );
-                            }
-                        }
 
-                        true
-                    } else {
-                        if let Some(event) = event {
-                            if let Some(title) = self.title() {
-                                if let Ok(path) = self.exe_path() {
+                                true
+                            } else {
+                                if let Some(event) = event {
                                     debug!(
                                         "ignoring {} - {} (event: {}) (cloaked: {}) (styles: {:?}) (extended styles: {:?})",
                                         exe_name_from_path(&path),
@@ -331,15 +346,16 @@ impl Window {
                                         ex_style
                                     );
                                 }
+                                false
                             }
+                        } else {
+                            false
                         }
-                        false
                     }
+                    _ => false,
                 }
-                _ => false,
             }
-        } else {
-            false
+            _ => false,
         }
     }
 
