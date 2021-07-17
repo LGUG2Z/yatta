@@ -282,6 +282,9 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
 
             display.apply_layout(None);
         }
+        // This clippy suggestion changes the logic, a known issue tracked here:
+        // https://github.com/rust-lang/rust-clippy/issues/7452
+        #[allow(clippy::branches_sharing_code)]
         WindowsEventType::Show => {
             let mut all_windows = Vec::new();
             display.get_all_windows(&mut all_windows);
