@@ -9,7 +9,7 @@ use std::{
     io::{BufRead, BufReader, ErrorKind},
     process::exit,
     str::FromStr,
-    sync::{Arc, Mutex},
+    sync::{mpsc::channel, Arc, Mutex},
     thread,
 };
 
@@ -115,6 +115,29 @@ fn main() -> Result<()> {
             .to_str()
             .context("could not convert socket path to string")?
     );
+
+    let (ctrlc_tx, ctrlc_rx) = channel();
+    ctrlc::set_handler(move || {
+        ctrlc_tx
+            .send(())
+            .expect("could not send signal on ctrl-c channel")
+    })
+    .expect("error setting ctrl-c handler");
+
+    let desktop_clone = desktop.clone();
+    thread::spawn(move || {
+        ctrlc_rx
+            .recv()
+            .expect("could not receive signal on ctrl-c channel");
+
+        let desktop = desktop_clone.lock().unwrap();
+        let windows = desktop.get_all_windows();
+        for mut window in windows {
+            window.restore();
+        }
+
+        std::process::exit(130);
+    });
 
     let desktop_clone = desktop.clone();
     thread::spawn(move || {
