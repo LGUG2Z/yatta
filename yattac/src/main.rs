@@ -35,6 +35,9 @@ enum SubCommand {
     FloatClass(FloatTarget),
     FloatExe(FloatTarget),
     FloatTitle(FloatTarget),
+    SetWorkspace(WorkspaceIndex),
+    MoveWindowToWorkspace(WorkspaceIndex),
+    MoveWindowToWorkspaceAndFollow(WorkspaceIndex),
 }
 
 #[derive(Clap)]
@@ -46,6 +49,11 @@ struct Resize {
 #[derive(Clap)]
 struct Gap {
     size: i32,
+}
+
+#[derive(Clap)]
+struct WorkspaceIndex {
+    index: usize,
 }
 
 #[derive(Clap)]
@@ -161,15 +169,8 @@ fn main() {
             }
         }
         SubCommand::Stop => {
-            let script = r#"Stop-Process -Name yatta"#;
-            match powershell_script::run(script, true) {
-                Ok(output) => {
-                    println!("{}", output);
-                }
-                Err(e) => {
-                    println!("Error: {}", e);
-                }
-            }
+            let bytes = SocketMessage::Stop.as_bytes().unwrap();
+            send_message(&*bytes);
         }
         SubCommand::FloatClass(target) => {
             let bytes = SocketMessage::FloatClass(target.id).as_bytes().unwrap();
@@ -181,6 +182,22 @@ fn main() {
         }
         SubCommand::FloatTitle(target) => {
             let bytes = SocketMessage::FloatTitle(target.id).as_bytes().unwrap();
+            send_message(&*bytes);
+        }
+        SubCommand::SetWorkspace(index) => {
+            let bytes = SocketMessage::SetWorkspace(index.index).as_bytes().unwrap();
+            send_message(&*bytes);
+        }
+        SubCommand::MoveWindowToWorkspace(index) => {
+            let bytes = SocketMessage::MoveWindowToWorkspace(index.index)
+                .as_bytes()
+                .unwrap();
+            send_message(&*bytes);
+        }
+        SubCommand::MoveWindowToWorkspaceAndFollow(index) => {
+            let bytes = SocketMessage::MoveWindowToWorkspaceAndFollow(index.index)
+                .as_bytes()
+                .unwrap();
             send_message(&*bytes);
         }
     }

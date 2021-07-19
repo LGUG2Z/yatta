@@ -182,6 +182,80 @@ return
 !p::
 Run, yattac.exe toggle-pause, Hide
 return
+
+; Switch to workspace
+!1::
+Run, yattac.exe set-workspace 0, Hide
+return
+
+!2::
+Run, yattac.exe set-workspace 1, Hide
+return
+
+!3::
+Run, yattac.exe set-workspace 2, Hide
+return
+
+!4::
+Run, yattac.exe set-workspace 3, Hide
+return
+
+!5::
+Run, yattac.exe set-workspace 4, Hide
+return
+
+!6::
+Run, yattac.exe set-workspace 5, Hide
+return
+
+!7::
+Run, yattac.exe set-workspace 6, Hide
+return
+
+!8::
+Run, yattac.exe set-workspace 7, Hide
+return
+
+!9::
+Run, yattac.exe set-workspace 8, Hide
+return
+
+; Move window to workspace
+!+1::
+Run, yattac.exe move-window-to-workspace 0, Hide
+return
+
+!+2::
+Run, yattac.exe move-window-to-workspace 1, Hide
+return
+
+!+3::
+Run, yattac.exe move-window-to-workspace 2, Hide
+return
+
+!+4::
+Run, yattac.exe move-window-to-workspace 3, Hide
+return
+
+!+5::
+Run, yattac.exe move-window-to-workspace 4, Hide
+return
+
+!+6::
+Run, yattac.exe move-window-to-workspace 5, Hide
+return
+
+!+7::
+Run, yattac.exe move-window-to-workspace 6, Hide
+return
+
+!+8::
+Run, yattac.exe move-window-to-workspace 7, Hide
+return
+
+!+9::
+Run, yattac.exe move-window-to-workspace 8, Hide
+return
 ```
 
 As more commands are still being added and some commands and arguments may change before the CLI is stabilised, I
