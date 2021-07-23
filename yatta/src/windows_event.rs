@@ -14,9 +14,12 @@ use log::{error, info};
 use strum::Display;
 
 use bindings::Windows::Win32::{
-    Gdi::{MonitorFromWindow, MONITOR_FROM_FLAGS},
-    WindowsAccessibility::{SetWinEventHook, HWINEVENTHOOK},
-    WindowsAndMessaging::{EVENT_MAX, EVENT_MIN, HWND},
+    Foundation::HWND,
+    Graphics::Gdi::{MonitorFromWindow, MONITOR_DEFAULTTOPRIMARY},
+    UI::{
+        Accessibility::{SetWinEventHook, HWINEVENTHOOK},
+        WindowsAndMessaging::{EVENT_MAX, EVENT_MIN},
+    },
 };
 
 use crate::{
@@ -53,7 +56,7 @@ impl WindowsEventListener {
             let hook_ref = SetWinEventHook(
                 EVENT_MIN as u32,
                 EVENT_MAX as u32,
-                0,
+                None,
                 Some(handler),
                 0,
                 0,
@@ -95,7 +98,7 @@ extern "system" fn handler(
         return;
     }
 
-    let hmonitor = unsafe { MonitorFromWindow(hwnd, MONITOR_FROM_FLAGS::MONITOR_DEFAULTTOPRIMARY) };
+    let hmonitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY) };
 
     let window = Window {
         hwnd,

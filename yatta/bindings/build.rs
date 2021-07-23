@@ -1,18 +1,23 @@
 fn main() {
     windows::build!(
-        Windows::Win32::DisplayDevices::{POINT, RECT},
-        Windows::Win32::Dwm::*,
-        Windows::Win32::Gdi::*,
-        Windows::Win32::SystemServices::{
-            PROCESS_ACCESS_RIGHTS,
+        Windows::Win32::Foundation::{
+            POINT,
+            RECT,
             BOOL,
             PWSTR,
-            QueryFullProcessImageNameW,
-            PROCESS_NAME_FORMAT,
-            OpenProcess
+            HWND,
+            LPARAM,
         },
-        Windows::Win32::KeyboardAndMouseInput::SetFocus,
-        Windows::Win32::WindowsAccessibility::{SetWinEventHook, HWINEVENTHOOK},
-        Windows::Win32::WindowsAndMessaging::*,
+        Windows::Win32::Graphics::Dwm::*,
+        Windows::Win32::Graphics::Gdi::*,
+        Windows::Win32::System::Threading::{
+            PROCESS_ACCESS_RIGHTS,
+            PROCESS_NAME_FORMAT,
+            OpenProcess,
+            QueryFullProcessImageNameW,
+        },
+        Windows::Win32::UI::KeyboardAndMouseInput::SetFocus,
+        Windows::Win32::UI::Accessibility::{SetWinEventHook, HWINEVENTHOOK},
+        Windows::Win32::UI::WindowsAndMessaging::*,
     );
 }

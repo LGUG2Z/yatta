@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Clap;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use strum::{Display, EnumString};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Display)]
@@ -105,8 +106,12 @@ impl SocketMessage {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         Ok(serde_json::from_slice(bytes)?)
     }
+}
 
-    pub fn from_str(str: &str) -> Result<Self> {
-        Ok(serde_json::from_str(str)?)
+impl FromStr for SocketMessage {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
     }
 }

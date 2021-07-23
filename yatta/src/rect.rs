@@ -1,6 +1,6 @@
 use std::fmt::{Display, Error, Formatter};
 
-use bindings::Windows::Win32::DisplayDevices::RECT;
+use bindings::Windows::Win32::Foundation::RECT;
 
 /// x & y coordinates are relative to top left of screen
 #[derive(Debug, Clone, Copy, PartialEq)]

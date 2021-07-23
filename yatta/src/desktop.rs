@@ -3,8 +3,8 @@ use std::{borrow::BorrowMut, cmp::Ordering, mem};
 use enigo::{Enigo, MouseButton, MouseControllable};
 
 use bindings::Windows::Win32::{
-    DisplayDevices::{POINT, RECT},
-    Gdi::{
+    Foundation::{BOOL, HWND, LPARAM, POINT, RECT},
+    Graphics::Gdi::{
         EnumDisplayMonitors,
         GetMonitorInfoW,
         MonitorFromPoint,
@@ -12,17 +12,16 @@ use bindings::Windows::Win32::{
         HDC,
         HMONITOR,
         MONITORINFO,
-        MONITOR_FROM_FLAGS,
+        MONITOR_DEFAULTTONEAREST,
+        MONITOR_DEFAULTTOPRIMARY,
     },
-    SystemServices::BOOL,
-    WindowsAndMessaging::{
+    UI::WindowsAndMessaging::{
         EnumWindows,
         GetCursorPos,
         SetCursorPos,
-        HWND,
         HWND_NOTOPMOST,
-        LPARAM,
-        SET_WINDOW_POS_FLAGS,
+        SWP_NOMOVE,
+        SWP_NOSIZE,
     },
 };
 use yatta_core::{CycleDirection, Layout, ResizeEdge, Sizing};
@@ -90,7 +89,7 @@ impl Display {
         let idx = self.get_foreground_window_index();
         let can_resize = match self.layout {
             Layout::BSPV => match edge {
-                ResizeEdge::Left => self.windows.len() > 0 && idx != 0,
+                ResizeEdge::Left => !self.windows.is_empty() && idx != 0,
                 ResizeEdge::Top => self.windows.len() > 2 && idx != 0 && idx != 1,
                 ResizeEdge::Right => {
                     self.windows.len() > 1 && idx % 2 == 0 && idx != self.windows.len() - 1
@@ -515,9 +514,7 @@ impl Display {
                         w.set_pos(
                             self.layout_dimensions[new_idx],
                             None,
-                            Option::from(
-                                SET_WINDOW_POS_FLAGS::SWP_NOMOVE | SET_WINDOW_POS_FLAGS::SWP_NOSIZE,
-                            ),
+                            Option::from(SWP_NOMOVE | SWP_NOSIZE),
                         );
                     } else {
                         w.set_pos(self.layout_dimensions[i - skipped], None, None)
@@ -540,7 +537,7 @@ impl Desktop {
             let mut cursor_pos: POINT = mem::zeroed();
             GetCursorPos(&mut cursor_pos);
 
-            MonitorFromPoint(cursor_pos, MONITOR_FROM_FLAGS::MONITOR_DEFAULTTONEAREST)
+            MonitorFromPoint(cursor_pos, MONITOR_DEFAULTTONEAREST)
         };
 
         for (i, display) in self.displays.iter().enumerate() {
@@ -747,7 +744,7 @@ impl Default for Desktop {
 extern "system" fn enum_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
     let windows = unsafe { &mut *(lparam.0 as *mut Vec<Window>) };
 
-    let hmonitor = unsafe { MonitorFromWindow(hwnd, MONITOR_FROM_FLAGS::MONITOR_DEFAULTTOPRIMARY) };
+    let hmonitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY) };
 
     let w = Window {
         hwnd,
@@ -807,18 +804,14 @@ fn bsp(
     gaps: i32,
     resize_dimensions: Vec<Option<Rect>>,
 ) -> Vec<Rect> {
-    let mut a = area.clone();
+    let mut a = area;
 
-    let resized = if let Some(opt) = resize_dimensions.get(i) {
-        if let Some(r) = opt {
-            a.x += r.x;
-            a.y += r.y;
-            a.width += r.width;
-            a.height += r.height;
-            a
-        } else {
-            area
-        }
+    let resized = if let Some(Some(r)) = resize_dimensions.get(i) {
+        a.x += r.x;
+        a.y += r.y;
+        a.width += r.width;
+        a.height += r.height;
+        a
     } else {
         area
     };

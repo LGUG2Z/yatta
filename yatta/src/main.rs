@@ -8,6 +8,7 @@ use std::{
     collections::HashMap,
     io::{BufRead, BufReader, ErrorKind},
     process::exit,
+    str::FromStr,
     sync::{Arc, Mutex},
     thread,
 };
@@ -21,8 +22,8 @@ use sysinfo::SystemExt;
 use uds_windows::UnixListener;
 
 use bindings::Windows::Win32::{
-    DisplayDevices::POINT,
-    WindowsAndMessaging::{GetCursorPos, HWND_TOP, SET_WINDOW_POS_FLAGS},
+    Foundation::POINT,
+    UI::WindowsAndMessaging::{GetCursorPos, HWND_TOP, SWP_NOMOVE, SWP_NOSIZE},
 };
 use yatta_core::{CycleDirection, Layout, OperationDirection, ResizeEdge, Sizing, SocketMessage};
 
@@ -86,7 +87,7 @@ fn main() -> Result<()> {
     let listener = Arc::new(Mutex::new(WindowsEventListener::default()));
     listener.lock().unwrap().start();
 
-    let mut socket = home.clone();
+    let mut socket = home;
     socket.push("yatta.sock");
     let socket = socket.as_path();
 
@@ -174,7 +175,7 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
             ev.window.set_pos(
                 old_position,
                 Option::from(HWND_TOP),
-                Option::from(SET_WINDOW_POS_FLAGS::SWP_NOMOVE | SET_WINDOW_POS_FLAGS::SWP_NOSIZE),
+                Option::from(SWP_NOMOVE | SWP_NOSIZE),
             )
         }
         WindowsEventType::MoveResizeEnd => {
@@ -208,8 +209,8 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
                 }
 
                 if let Some(new_idx) = target_window_idx {
-                    let window_resize = display.windows[idx].resize.clone();
-                    let new_window_resize = display.windows[new_idx].resize.clone();
+                    let window_resize = display.windows[idx].resize;
+                    let new_window_resize = display.windows[new_idx].resize;
 
                     {
                         let window = display.windows[idx].borrow_mut();
@@ -302,7 +303,7 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
                     // over those resize adjustments and remove them from the window that is
                     // currently there
                     if let Some(current_window) = display.windows.get_mut(idx) {
-                        let resize = current_window.resize.clone();
+                        let resize = current_window.resize;
                         current_window.resize = None;
                         ev.window.resize = resize;
                     }
@@ -335,7 +336,7 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
             // resize adjustments and add them from the window that is going to take the
             // space of the window being removed
             let resize = if let Some(current_window) = display.windows.get(idx.unwrap_or(0)) {
-                current_window.resize.clone()
+                current_window.resize
             } else {
                 None
             };
@@ -396,8 +397,8 @@ impl DirectionOperation {
                 }
             }
             DirectionOperation::Move => {
-                let window_resize = display.windows[idx].resize.clone();
-                let new_window_resize = display.windows[new_idx].resize.clone();
+                let window_resize = display.windows[idx].resize;
+                let new_window_resize = display.windows[new_idx].resize;
 
                 {
                     let window = display.windows[idx].borrow_mut();
@@ -468,7 +469,7 @@ fn handle_socket_message(
                             Layout::Monocle => {
                                 let idx = d.get_foreground_window_index();
                                 if let Some(window) = d.windows.get(idx) {
-                                    let window = window.clone();
+                                    let window = *window;
                                     let last_desktop = LAST_LAYOUT.lock().unwrap();
                                     d.layout = *last_desktop;
                                     d.calculate_layout();
