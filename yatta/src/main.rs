@@ -22,8 +22,8 @@ use sysinfo::SystemExt;
 use uds_windows::UnixListener;
 
 use bindings::Windows::Win32::{
-    DisplayDevices::POINT,
-    WindowsAndMessaging::{GetCursorPos, HWND_TOP, SET_WINDOW_POS_FLAGS},
+    Foundation::POINT,
+    UI::WindowsAndMessaging::{GetCursorPos, HWND_TOP, SWP_NOMOVE, SWP_NOSIZE},
 };
 use yatta_core::{CycleDirection, Layout, OperationDirection, ResizeEdge, Sizing, SocketMessage};
 
@@ -198,7 +198,7 @@ fn handle_windows_event_message(mut ev: WindowsEvent, desktop: Arc<Mutex<Desktop
             ev.window.set_pos(
                 old_position,
                 Option::from(HWND_TOP),
-                Option::from(SET_WINDOW_POS_FLAGS::SWP_NOMOVE | SET_WINDOW_POS_FLAGS::SWP_NOSIZE),
+                Option::from(SWP_NOMOVE | SWP_NOSIZE),
             )
         }
         WindowsEventType::MoveResizeEnd => {

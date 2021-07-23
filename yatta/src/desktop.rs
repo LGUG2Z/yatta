@@ -3,8 +3,8 @@ use std::{borrow::BorrowMut, cmp::Ordering, mem};
 use enigo::{Enigo, MouseButton, MouseControllable};
 
 use bindings::Windows::Win32::{
-    DisplayDevices::{POINT, RECT},
-    Gdi::{
+    Foundation::{BOOL, HWND, LPARAM, POINT, RECT},
+    Graphics::Gdi::{
         EnumDisplayMonitors,
         GetMonitorInfoW,
         MonitorFromPoint,
@@ -12,17 +12,16 @@ use bindings::Windows::Win32::{
         HDC,
         HMONITOR,
         MONITORINFO,
-        MONITOR_FROM_FLAGS,
+        MONITOR_DEFAULTTONEAREST,
+        MONITOR_DEFAULTTOPRIMARY,
     },
-    SystemServices::BOOL,
-    WindowsAndMessaging::{
+    UI::WindowsAndMessaging::{
         EnumWindows,
         GetCursorPos,
         SetCursorPos,
-        HWND,
         HWND_NOTOPMOST,
-        LPARAM,
-        SET_WINDOW_POS_FLAGS,
+        SWP_NOMOVE,
+        SWP_NOSIZE,
     },
 };
 use yatta_core::{CycleDirection, Layout, ResizeEdge, Sizing};
@@ -656,9 +655,7 @@ impl Display {
                         w.set_pos(
                             self.get_layout_dimensions()[new_idx],
                             None,
-                            Option::from(
-                                SET_WINDOW_POS_FLAGS::SWP_NOMOVE | SET_WINDOW_POS_FLAGS::SWP_NOSIZE,
-                            ),
+                            Option::from(SWP_NOMOVE | SWP_NOSIZE),
                         );
                     } else {
                         w.set_pos(self.get_layout_dimensions()[i - skipped], None, None)
@@ -681,7 +678,7 @@ impl Desktop {
             let mut cursor_pos: POINT = mem::zeroed();
             GetCursorPos(&mut cursor_pos);
 
-            MonitorFromPoint(cursor_pos, MONITOR_FROM_FLAGS::MONITOR_DEFAULTTONEAREST)
+            MonitorFromPoint(cursor_pos, MONITOR_DEFAULTTONEAREST)
         };
 
         for (i, display) in self.displays.iter().enumerate() {
@@ -896,7 +893,7 @@ impl Default for Desktop {
 extern "system" fn enum_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
     let windows = unsafe { &mut *(lparam.0 as *mut Vec<Window>) };
 
-    let hmonitor = unsafe { MonitorFromWindow(hwnd, MONITOR_FROM_FLAGS::MONITOR_DEFAULTTOPRIMARY) };
+    let hmonitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY) };
 
     let w = Window {
         hwnd,
