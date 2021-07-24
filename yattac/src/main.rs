@@ -25,6 +25,7 @@ enum SubCommand {
     Promote,
     Retile,
     GapSize(Gap),
+    PaddingSize(Gap),
     Layout(Layout),
     CycleLayout(CycleDirection),
     ToggleFloat,
@@ -127,6 +128,10 @@ fn main() {
         }
         SubCommand::GapSize(gap) => {
             let bytes = SocketMessage::GapSize(gap.size).as_bytes().unwrap();
+            send_message(&*bytes);
+        }
+        SubCommand::PaddingSize(gap) => {
+            let bytes = SocketMessage::PaddingSize(gap.size).as_bytes().unwrap();
             send_message(&*bytes);
         }
         SubCommand::AdjustGaps(sizing) => {

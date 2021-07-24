@@ -19,6 +19,7 @@ pub enum SocketMessage {
     Layout(Layout),
     CycleLayout(CycleDirection),
     GapSize(i32),
+    PaddingSize(i32),
     ToggleFloat,
     TogglePause,
     ToggleMonocle,

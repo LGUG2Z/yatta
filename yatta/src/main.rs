@@ -50,6 +50,8 @@ lazy_static! {
         Arc::new(Mutex::new(HashMap::new()));
     static ref LAST_LAYOUT: Arc<Mutex<Layout>> = Arc::new(Mutex::new(Layout::BSPV));
     static ref LAYERED_EXE_WHITELIST: Vec<String> = vec!["steam.exe".to_string()];
+    // Can be set to lower than 20, but it won't scale evenly (yet)
+    static ref PADDING: Arc<Mutex<i32>> = Arc::new(Mutex::new(20));
 }
 
 #[derive(Clone, Debug)]
@@ -478,13 +480,13 @@ fn handle_socket_message(
                                     // If we have monocle'd a floating window, we want to restore it
                                     // to the default floating position when toggling off monocle
                                     if !window.tile {
-                                        let w2 = d.dimensions.width / 2;
-                                        let h2 = d.dimensions.height / 2;
+                                        let w2 = d.get_dimensions().width / 2;
+                                        let h2 = d.get_dimensions().height / 2;
                                         let center = Rect {
-                                            x:      d.dimensions.x
-                                                + ((d.dimensions.width - w2) / 2),
-                                            y:      d.dimensions.y
-                                                + ((d.dimensions.height - h2) / 2),
+                                            x:      d.get_dimensions().x
+                                                + ((d.get_dimensions().width - w2) / 2),
+                                            y:      d.get_dimensions().y
+                                                + ((d.get_dimensions().height - h2) / 2),
                                             width:  w2,
                                             height: h2,
                                         };
@@ -512,11 +514,13 @@ fn handle_socket_message(
 
                             // Centre the window if we have disabled tiling
                             if !window.tile {
-                                let w2 = d.dimensions.width / 2;
-                                let h2 = d.dimensions.height / 2;
+                                let w2 = d.get_dimensions().width / 2;
+                                let h2 = d.get_dimensions().height / 2;
                                 let center = Rect {
-                                    x:      d.dimensions.x + ((d.dimensions.width - w2) / 2),
-                                    y:      d.dimensions.y + ((d.dimensions.height - h2) / 2),
+                                    x:      d.get_dimensions().x
+                                        + ((d.get_dimensions().width - w2) / 2),
+                                    y:      d.get_dimensions().y
+                                        + ((d.get_dimensions().height - h2) / 2),
                                     width:  w2,
                                     height: h2,
                                 };
@@ -572,6 +576,11 @@ fn handle_socket_message(
                         }
                         SocketMessage::GapSize(size) => {
                             d.gaps = size;
+                            d.calculate_layout();
+                            d.apply_layout(None);
+                        }
+                        SocketMessage::PaddingSize(size) => {
+                            *PADDING.lock().unwrap() = size;
                             d.calculate_layout();
                             d.apply_layout(None);
                         }

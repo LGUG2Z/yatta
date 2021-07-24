@@ -26,7 +26,7 @@ use bindings::Windows::Win32::{
 };
 use yatta_core::{CycleDirection, Layout, ResizeEdge, Sizing};
 
-use crate::{rect::Rect, window::Window, DirectionOperation};
+use crate::{rect::Rect, window::Window, DirectionOperation, PADDING};
 
 #[derive(Debug, Clone)]
 pub struct Desktop {
@@ -38,15 +38,29 @@ pub struct Desktop {
 pub struct Display {
     pub windows:           Vec<Window>,
     pub hmonitor:          HMONITOR,
-    pub dimensions:        Rect,
+    dimensions:            Rect,
     pub layout:            Layout,
     pub layout_dimensions: Vec<Rect>,
     pub foreground_window: Window,
     pub gaps:              i32,
+    pub padding:           i32,
     pub resize_step:       i32,
 }
 
 impl Display {
+    pub fn get_dimensions(&self) -> Rect {
+        let mut rect = self.dimensions;
+
+        let padding = PADDING.lock().unwrap();
+
+        rect.height -= *padding * 2;
+        rect.width -= *padding * 2;
+        rect.y += *padding;
+        rect.x += *padding;
+
+        rect
+    }
+
     pub fn get_foreground_window(&mut self) {
         self.foreground_window = Window::foreground();
     }
@@ -67,8 +81,8 @@ impl Display {
     pub fn set_cursor_pos_to_centre(&self) {
         unsafe {
             SetCursorPos(
-                self.dimensions.x + (self.dimensions.width / 2),
-                self.dimensions.y + (self.dimensions.height / 2),
+                self.get_dimensions().x + (self.get_dimensions().width / 2),
+                self.get_dimensions().y + (self.get_dimensions().height / 2),
             );
         }
     }
@@ -123,7 +137,7 @@ impl Display {
             let layout = bsp(
                 0,
                 self.windows.len(),
-                self.dimensions,
+                self.get_dimensions(),
                 vertical,
                 self.gaps,
                 vec![],
@@ -444,46 +458,58 @@ impl Display {
 
         match self.layout {
             Layout::Monocle => {
-                self.layout_dimensions = bsp(0, 1, self.dimensions, 1, self.gaps, vec![]);
+                self.layout_dimensions = bsp(0, 1, self.get_dimensions(), 1, self.gaps, vec![]);
             }
             Layout::BSPV => {
                 let resize_adjustments = self.calculate_resize_adjustments();
-                self.layout_dimensions =
-                    bsp(0, len, self.dimensions, 1, self.gaps, resize_adjustments);
+                self.layout_dimensions = bsp(
+                    0,
+                    len,
+                    self.get_dimensions(),
+                    1,
+                    self.gaps,
+                    resize_adjustments,
+                );
             }
             Layout::BSPH => {
                 let resize_adjustments = self.calculate_resize_adjustments();
-                self.layout_dimensions =
-                    bsp(0, len, self.dimensions, 0, self.gaps, resize_adjustments);
+                self.layout_dimensions = bsp(
+                    0,
+                    len,
+                    self.get_dimensions(),
+                    0,
+                    self.gaps,
+                    resize_adjustments,
+                );
             }
             Layout::Columns => {
-                let width_f = self.dimensions.width as f32 / len as f32;
+                let width_f = self.get_dimensions().width as f32 / len as f32;
                 let width = width_f.floor() as i32;
 
                 let mut x = 0;
                 let mut layouts: Vec<Rect> = vec![];
                 for _ in &self.windows {
                     layouts.push(Rect {
-                        x:      (self.dimensions.x + x) + self.gaps,
-                        y:      (self.dimensions.y) + self.gaps,
+                        x:      (self.get_dimensions().x + x) + self.gaps,
+                        y:      (self.get_dimensions().y) + self.gaps,
                         width:  width - (self.gaps * 2),
-                        height: self.dimensions.height - (self.gaps * 2),
+                        height: self.get_dimensions().height - (self.gaps * 2),
                     });
                     x += width;
                 }
                 self.layout_dimensions = layouts
             }
             Layout::Rows => {
-                let height_f = self.dimensions.height as f32 / len as f32;
+                let height_f = self.get_dimensions().height as f32 / len as f32;
                 let height = height_f.floor() as i32;
 
                 let mut y = 0;
                 let mut layouts: Vec<Rect> = vec![];
                 for _ in &self.windows {
                     layouts.push(Rect {
-                        x:      self.dimensions.x + self.gaps,
-                        y:      self.dimensions.y + y + self.gaps,
-                        width:  self.dimensions.width - (self.gaps * 2),
+                        x:      self.get_dimensions().x + self.gaps,
+                        y:      self.get_dimensions().y + y + self.gaps,
+                        width:  self.get_dimensions().width - (self.gaps * 2),
                         height: height - (self.gaps * 2),
                     });
                     y += height;
@@ -528,8 +554,6 @@ impl Display {
         }
     }
 }
-
-pub const PADDING: i32 = 20;
 
 impl Desktop {
     pub fn get_active_display_idx(&self) -> usize {
@@ -768,7 +792,7 @@ extern "system" fn enum_display_monitor(
 ) -> BOOL {
     let displays = unsafe { &mut *(lparam.0 as *mut Vec<Display>) };
 
-    let mut rect: Rect = unsafe {
+    let rect: Rect = unsafe {
         let mut info: MONITORINFO = mem::zeroed();
         info.cbSize = mem::size_of::<MONITORINFO>() as u32;
 
@@ -777,15 +801,13 @@ extern "system" fn enum_display_monitor(
         info.rcWork.into()
     };
 
-    rect.height -= PADDING * 2;
-    rect.width -= PADDING * 2;
-    rect.y += PADDING;
-    rect.x += PADDING;
+    let padding = PADDING.lock().unwrap();
 
     displays.push(Display {
         dimensions:        rect,
         foreground_window: Window::default(),
         gaps:              5,
+        padding:           *padding,
         resize_step:       50,
         hmonitor:          monitor,
         layout:            Layout::BSPV,
