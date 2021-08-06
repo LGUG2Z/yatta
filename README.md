@@ -1,3 +1,10 @@
+# NOTICE
+
+`yatta` is no longer being actively developed. If you liked `yatta`, please
+check out [*komorebi*](https://github.com/LGUG2Z/komorebi), a new tiling window
+manager for Windows 10 that I am working on, which has support for multiple
+monitors, virtual workspaces and window stacks!
+
 # yatta
 
 BSP Tiling Window Manager for Windows 10
